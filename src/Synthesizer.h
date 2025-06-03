@@ -1,12 +1,12 @@
 #pragma once
-#include <synth_karplusstrong.h>
 #include <output_i2s.h>
 #include <Audio.h>
 #include <map>
+#include "karplus_strong_string_synth.h"
 
 class Synthesizer {
 
-    AudioSynthKarplusStrong strings[8];
+    KarplusStrongStringSynth strings[8];
     AudioMixer4 mixerL1, mixerL2;
     AudioMixer4 mixerR1, mixerR2;
     AudioMixer4 sumL, sumR;
@@ -18,6 +18,9 @@ class Synthesizer {
     AudioConnection* patchCordR;
 
     std::map<int, int> keyToString; // key -> string index
+    std::map<int, float> keyToBaseFreq; // key -> base frequency (without bend)
+    float pitchBendFactor = 1.0f; // Current pitch bend multiplier
+    float masterVolume = 1.0f;
 
 public:
     Synthesizer() :
@@ -30,23 +33,22 @@ public:
         for (int i = 0; i < 4; ++i) {
             patchCords[i]     = new AudioConnection(strings[i], 0, mixerL1, i);
             patchCords[i + 8] = new AudioConnection(strings[i], 0, mixerR1, i);
-            mixerL1.gain(i, 0.25f);
-            mixerR1.gain(i, 0.25f);
+
         }
         // Strings 4-7 to mixerL2 and mixerR2
         for (int i = 4; i < 8; ++i) {
             patchCords[i]     = new AudioConnection(strings[i], 0, mixerL2, i - 4);
             patchCords[i + 8] = new AudioConnection(strings[i], 0, mixerR2, i - 4);
-            mixerL2.gain(i - 4, 0.25f);
-            mixerR2.gain(i - 4, 0.25f);
         }
+        setVolume(1.0f);
+
         // Sum both left mixers and both right mixers
         patchCordSumL = new AudioConnection(mixerL1, 0, sumL, 0);
         patchCordSumL = new AudioConnection(mixerL2, 0, sumL, 1);
         patchCordSumR = new AudioConnection(mixerR1, 0, sumR, 0);
         patchCordSumR = new AudioConnection(mixerR2, 0, sumR, 1);
-        sumL.gain(0, 0.5f); sumL.gain(1, 0.5f);
-        sumR.gain(0, 0.5f); sumR.gain(1, 0.5f);
+        sumL.gain(0, 1.0f); sumL.gain(1, 1.0f); // It's possible for these to clip, but unlikely
+        sumR.gain(0, 1.0f); sumR.gain(1, 1.0f);
 
         // Final output to I2S
         patchCordL = new AudioConnection(sumL, 0, i2s1, 0);
@@ -61,6 +63,16 @@ public:
         delete patchCordR;
     }
 
+    void setVolume(float volume) {
+        masterVolume = volume;
+        for (int i = 0; i < 4; ++i) {
+            mixerL1.gain(i, masterVolume);
+            mixerR1.gain(i, masterVolume);
+            mixerL2.gain(i, masterVolume);
+            mixerR2.gain(i, masterVolume);
+        }
+    }
+
     void noteOn(int key, float freq, float velocity) {
         // Find a free string (not in keyToString)
         for (int i = 0; i < 8; ++i) {
@@ -72,8 +84,10 @@ public:
                 }
             }
             if (!inUse) {
-                strings[i].noteOn(freq, velocity);
-                keyToString[key] = i;
+                if(strings[i].noteOn(freq, velocity) == 0) {
+                    keyToString[key] = i;
+                    keyToBaseFreq[key] = freq;
+                }
                 return;
             }
         }
@@ -84,8 +98,34 @@ public:
         auto it = keyToString.find(key);
         if (it != keyToString.end()) {
             int stringIndex = it->second;
-            strings[stringIndex].noteOff(0.0f);
+            strings[stringIndex].noteOff();
             keyToString.erase(it);
+            keyToBaseFreq.erase(key);
+        }
+    }
+
+    void setPitchBend(float bendAmount) {
+        // bendAmount is in semitones
+        pitchBendFactor = pow(2.0f, bendAmount / 12.0f);
+        
+        // Apply bend to all active strings
+        for (const auto& pair : keyToString) {
+            int key = pair.first;
+            int stringIndex = pair.second;
+            float baseFreq = keyToBaseFreq[key];
+            //strings[stringIndex].frequency(baseFreq * pitchBendFactor);
+        }
+    }
+
+    void setAttenuation(uint16_t newAttenuation) {
+        for (int i = 0; i < 8; ++i) {
+            strings[i].setAttenuation(newAttenuation);
+        }
+    }
+
+    void setFilterStrength(uint16_t newStrength) {
+        for (int i = 0; i < 8; ++i) {
+            strings[i].setFilterStrength(newStrength);
         }
     }
 };

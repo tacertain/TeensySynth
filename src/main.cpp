@@ -7,12 +7,6 @@
 #include <output_i2s.h>
 #include "Synthesizer.h"
 
-// Remove these lines:
-// AudioSynthKarplusStrong  strings[8];
-// AudioOutputI2S           i2s1;
-// AudioConnection          patchCord1(string, 0, i2s1, 0);
-// AudioConnection          patchCord2(string, 0, i2s1, 1);
-
 Synthesizer synth;
 
 USBHost myusb;
@@ -26,11 +20,11 @@ void OnRawRelease(uint8_t keycode);
 void OnNoteOn(byte channel, byte note, byte velocity);
 void OnNoteOff(byte channel, byte note, byte velocity);
 void OnControlChange(byte channel, byte control, byte value);
-void OnPitchChange(byte channel, int bend); // <-- Changed name
+void OnPitchChange(byte channel, int bend); 
 
 void setup()
 {
-    while (!Serial) ; // wait for Arduino Serial Monitor
+    while (!Serial) ; 
     myusb.begin();
     keyboard1.attachPress(OnPress);
     keyboard1.attachRawPress(OnRawPress);
@@ -38,7 +32,7 @@ void setup()
     midi1.setHandleNoteOff(OnNoteOff);
     midi1.setHandleNoteOn(OnNoteOn);
     midi1.setHandleControlChange(OnControlChange);
-    midi1.setHandlePitchChange(OnPitchChange); // <-- Correct method name
+    midi1.setHandlePitchChange(OnPitchChange); 
     AudioMemory(15);
 
 }
@@ -94,7 +88,7 @@ void OnNoteOn(byte channel, byte note, byte velocity)
     Serial.print(vel);
     Serial.print(")");
     Serial.println();
-    synth.noteOn(note, freq, vel); // Using string 0 for now
+    synth.noteOn(note, freq, vel);
 }
 
 void OnNoteOff(byte channel, byte note, byte velocity)
@@ -103,22 +97,40 @@ void OnNoteOff(byte channel, byte note, byte velocity)
 	Serial.print(channel);
 	Serial.print(", note=");
 	Serial.print(note);
-	//Serial.print(", velocity=");
-	//Serial.print(velocity);
 	Serial.println();
-	synth.noteOff(note); // Using string 0 for now
+	synth.noteOff(note); 
 
 }
 
 void OnControlChange(byte channel, byte control, byte value)
 {
-	Serial.print("Control Change, ch=");
-	Serial.print(channel);
-	Serial.print(", control=");
-	Serial.print(control);
-	Serial.print(", value=");
-	Serial.print(value);
-	Serial.println();
+    Serial.print("Control Change, ch=");
+    Serial.print(channel);
+    Serial.print(", control=");
+    Serial.print(control);
+    Serial.print(", value=");
+    Serial.print(value);
+    Serial.println();
+
+    if(channel == 1 && control == 21) {
+        synth.setAttenuation(value);
+    }
+    if(channel == 1 && control == 22) {
+        synth.setFilterStrength(value);
+    }
+
+    if(channel == 1 && control == 7) {
+        synth.setVolume((float)value / 127.0f);
+    }
+
+    if(channel == 1 && control == 51 && value == 127) {
+        Serial.print("Max CPU Usage = ");
+        Serial.print(AudioProcessorUsageMax(), 1);
+        Serial.print("% Max memory usage = ");
+		Serial.print(AudioMemoryUsageMax(), 1);
+		Serial.print("%");
+		Serial.println();
+    }
 }
 
 void OnPitchChange(byte channel, int bend) // <-- Changed function name
@@ -127,6 +139,9 @@ void OnPitchChange(byte channel, int bend) // <-- Changed function name
     Serial.print(channel);
     Serial.print(", bend=");
     Serial.println(bend);
-    // You can add code here to apply pitch bend to your synth
+    
+    // Convert MIDI pitch bend (-8192 to +8191) to -4.0-4.0 range
+    float bendAmount = (float)bend / 8192.0f * 4.0f;
+    synth.setPitchBend(bendAmount);
 }
 
