@@ -14,8 +14,8 @@ static uint32_t pseudorand(uint32_t lo)
 }
 
 void KarplusStrongStringSynth::fillBuffer(uint16_t fromBuffer, uint16_t attenuation, uint16_t filter) { 
-	int16_t *from = buffers[fromBuffer & 0x1];
-	int16_t *to = buffers[(fromBuffer ^ 0x1) & 0x1];
+	int16_t *from = buffers[fromBuffer % 2];
+	int16_t *to = buffers[(fromBuffer + 1) % 2];
 
 	int16_t prior = to[bufferLen - 1];
 	for(int i=0; i<bufferLen; ++i, ++from, ++to) {
@@ -26,13 +26,15 @@ void KarplusStrongStringSynth::fillBuffer(uint16_t fromBuffer, uint16_t attenuat
 		int16_t out = ((int32_t)interpolated * attenuation) >> 16;
 
 		if(i==0) {
-			if(loops % 100 == 0) Serial.printf("in = %x, prior = %x, filterScaled = %x, out = %x, attenuation = %x\n", in, prior, filter, out, attenuation);
+			//if(loops % 100 == 0) Serial.printf("in = %x, prior = %x, filterScaled = %x, out = %x, attenuation = %x\n", in, prior, filter, out, attenuation);
 			loops++;
 		}
 		prior = in;
 		*to = out;
 	}
+	bufferGeneration[(fromBuffer + 1) % 2] = bufferGeneration[fromBuffer % 2] + fromBuffer % 2;
 }
+
 void KarplusStrongStringSynth::update(void)
 {
 	audio_block_t *block;
@@ -61,6 +63,8 @@ void KarplusStrongStringSynth::update(void)
 		state = 2;
 		loops = 0;
 		whichBuffer = 0;
+		bufferGeneration[0] = 0;
+		bufferGeneration[1] = -1;
 		fillBuffer(0, attenuationScaled, filterScaled);
 
 		Serial.printf("bufferLen = %d\n", bufferLen);
@@ -85,15 +89,51 @@ void KarplusStrongStringSynth::update(void)
 
 	for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++)
 	{
-		*data++ = buffers[whichBuffer][bufferIndex];
-		if (++bufferIndex >= bufferLen) {
-			fillBuffer(whichBuffer, attenuationScaled, filterScaled);
+		// bufferPosition is in 16.16 fixed-point format
+		// High 16 bits = integer part, low 16 bits = fractional part
+		uint32_t intPos = bufferPosition >> 16;           // Integer part
+		uint32_t fracPart = bufferPosition & 0xFFFF;      // Fractional part (0-65535)
+		
+		// Get the two samples to interpolate between
+		int16_t sample1 = buffers[whichBuffer][intPos];
+
+		int16_t sample2;
+		// Sample2 might be beyond the buffer end, so we will need to recompule
+		if(intPos + 1 >= bufferLen) {
+            //fillIfNecessary(attenuationScaled, filterScaled);
+            sample2 = buffers[(whichBuffer + 1) % 2][intPos + 1];
+		}
+		else
+			sample2 = buffers[whichBuffer][intPos + 1];
+		
+		// Linear interpolation using fixed-point math
+		// interpolated = sample1 + (sample2 - sample1) * fracPart / 65536
+		int32_t diff = sample2 - sample1;
+		int32_t interpolated = sample1 + ((diff * fracPart) >> 16);
+		
+		*data++ = (int16_t)interpolated;
+		
+		// Advance fractional position by delayIncrementFixed (16.16 format)
+		bufferPosition += delayIncrementFixed;
+		
+		// Check if we've completed a full buffer cycle
+		if ((bufferPosition >> 16) >= bufferLen) {
+            fillIfNecessary(attenuationScaled, filterScaled);
 			whichBuffer = (whichBuffer ^ 0x1) & 0x1;
-			bufferIndex = 0;
+			bufferPosition -= (bufferLen << 16); // Subtract buffer length in fixed-point
 		}
 	}
 	transmit(block);
 	release(block);
+}
+
+void KarplusStrongStringSynth::fillIfNecessary(uint16_t attenuationScaled, uint16_t filterScaled)
+{
+    if ((whichBuffer == 0 && bufferGeneration[1] < bufferGeneration[0]) || 
+		(whichBuffer == 1 && bufferGeneration[0] <= bufferGeneration[1]))
+    {
+        fillBuffer(whichBuffer, attenuationScaled, filterScaled);
+    }
 }
 
 uint32_t KarplusStrongStringSynth::seed = 1;

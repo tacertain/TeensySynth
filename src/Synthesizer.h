@@ -113,7 +113,7 @@ public:
             int key = pair.first;
             int stringIndex = pair.second;
             float baseFreq = keyToBaseFreq[key];
-            //strings[stringIndex].frequency(baseFreq * pitchBendFactor);
+            strings[stringIndex].updateFrequency(baseFreq * pitchBendFactor);
         }
     }
 
