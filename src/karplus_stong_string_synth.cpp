@@ -13,6 +13,26 @@ static uint32_t pseudorand(uint32_t lo)
 	return lo;
 }
 
+void KarplusStrongStringSynth::fillBuffer(uint16_t fromBuffer, uint16_t attenuation, uint16_t filter) { 
+	int16_t *from = buffers[fromBuffer & 0x1];
+	int16_t *to = buffers[(fromBuffer ^ 0x1) & 0x1];
+
+	int16_t prior = to[bufferLen - 1];
+	for(int i=0; i<bufferLen; ++i, ++from, ++to) {
+		int16_t in = *from;
+
+		int16_t interpolated = (((int32_t)in * filter) + ((int32_t)prior * ((1 << 16) - filter))) >> 16;
+
+		int16_t out = ((int32_t)interpolated * attenuation) >> 16;
+
+		if(i==0) {
+			if(loops % 100 == 0) Serial.printf("in = %x, prior = %x, filterScaled = %x, out = %x, attenuation = %x\n", in, prior, filter, out, attenuation);
+			loops++;
+		}
+		prior = in;
+		*to = out;
+	}
+}
 void KarplusStrongStringSynth::update(void)
 {
 	audio_block_t *block;
@@ -34,13 +54,14 @@ void KarplusStrongStringSynth::update(void)
 		for (int i = 0; i < bufferLen; i++)
 		{
 			lo = pseudorand(lo);
-			buffer[i] = signed_multiply_32x16b(initialAmplitude, lo);
+			buffers[0][i] = signed_multiply_32x16b(initialAmplitude, lo);
+			buffers[1][i] = signed_multiply_32x16b(initialAmplitude, lo);
 		}
 		seed = lo;
 		state = 2;
 		loops = 0;
-
-
+		whichBuffer = 0;
+		fillBuffer(0, attenuationScaled, filterScaled);
 
 		Serial.printf("bufferLen = %d\n", bufferLen);
 		Serial.printf("attentuation = %d, pow(%.3f, %.3f) = %.3f\n",
@@ -60,34 +81,16 @@ void KarplusStrongStringSynth::update(void)
 		return;
 	}
 
-	int16_t prior;
-	if (bufferIndex > 0)
-	{
-		prior = buffer[bufferIndex - 1];
-	}
-	else
-	{
-		prior = buffer[bufferLen - 1];
-	}
-
 	int16_t *data = block->data;
 
 	for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++)
 	{
-		int16_t in = buffer[bufferIndex];
-
-		int16_t interpolated = (((int32_t)in * filterScaled) + ((int32_t)prior * ((1 << 16) - filterScaled))) >> 16;
-
-		int16_t out = ((int32_t)interpolated * attenuationScaled) >> 16;
-		if(bufferIndex==0) {
-			if(loops % 100 == 0) Serial.printf("in = %x, prior = %x, filterScaled = %x, out = %x, attenuation = %x\n", in, prior, filterScaled, out, attenuationScaled);
-			loops++;
-		}
-		*data++ = out;
-		buffer[bufferIndex] = out;
-		prior = in;
-		if (++bufferIndex >= bufferLen)
+		*data++ = buffers[whichBuffer][bufferIndex];
+		if (++bufferIndex >= bufferLen) {
+			fillBuffer(whichBuffer, attenuationScaled, filterScaled);
+			whichBuffer = (whichBuffer ^ 0x1) & 0x1;
 			bufferIndex = 0;
+		}
 	}
 	transmit(block);
 	release(block);
