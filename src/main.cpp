@@ -1,11 +1,30 @@
 // Simple test of USB Host
 //
 // This example is in the public domain
-
+#include "SPI.h"
+#include "Adafruit_GFX.h"
+#include "ILI9341_t3.h"
 #include "USBHost_t36.h"
 #include <synth_karplusstrong.h>
 #include <output_i2s.h>
 #include "Synthesizer.h"
+
+/**
+ * Pin usage:
+ *
+ * TFT Display:
+ * CS: 10
+ * DC: 9
+ * SDI/MOSI: 11
+ * SCK: 13
+ * SDO/MISO: 12
+ * 
+ * 
+ * Audio:
+ * WSEL/LRCLK: 20
+ * BCLK: 21
+ * DIN: 7
+ */
 
 Synthesizer synth;
 
@@ -20,7 +39,21 @@ void OnRawRelease(uint8_t keycode);
 void OnNoteOn(byte channel, byte note, byte velocity);
 void OnNoteOff(byte channel, byte note, byte velocity);
 void OnControlChange(byte channel, byte control, byte value);
-void OnPitchChange(byte channel, int bend); 
+void OnPitchChange(byte channel, int bend);
+
+unsigned long testText();
+
+#define TFT_DC 9
+#define TFT_CS 10
+#define TFT_RST 255
+#define TFT_MOSI 11
+#define TFT_SCLK 13
+#define TFT_MISO 12
+
+// Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
+// Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
+ILI9341_t3 tft = ILI9341_t3(TFT_CS, TFT_DC, TFT_RST, TFT_MOSI, TFT_SCLK, TFT_MISO);
+// If using the breakout, change pins as desired
 
 void setup()
 {
@@ -35,15 +68,59 @@ void setup()
     midi1.setHandlePitchChange(OnPitchChange); 
     AudioMemory(15);
 
+    tft.begin();
 }
 
 
 void loop()
 {
-	myusb.Task();
-	midi1.read();
+    static uint8_t rotation = 0;
+    static unsigned long lastUpdate = 0;
+    unsigned long currentTime = millis();
+    
+    myusb.Task();
+    midi1.read();
+    
+    // Run rotation and display updates at most once per second
+    if (currentTime - lastUpdate >= 1000) {
+        tft.setRotation(rotation);
+        rotation = (rotation + 1) % 4;
+        testText();
+        Serial.println("Loop");
+        lastUpdate = currentTime;
+    }
 }
 
+unsigned long testText()
+{
+    tft.fillScreen(ILI9341_BLACK);
+    unsigned long start = micros();
+    tft.setCursor(0, 0);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(1);
+    tft.println("Hello World!");
+    tft.setTextColor(ILI9341_YELLOW);
+    tft.setTextSize(2);
+    tft.println(1234.56);
+    tft.setTextColor(ILI9341_RED);
+    tft.setTextSize(3);
+    tft.println(0xDEADBEEF, HEX);
+    tft.println();
+    tft.setTextColor(ILI9341_GREEN);
+    tft.setTextSize(5);
+    tft.println("Groop");
+    tft.setTextSize(2);
+    tft.println("I implore thee,");
+    tft.setTextSize(1);
+    tft.println("my foonting turlingdromes.");
+    tft.println("And hooptiously drangle me");
+    tft.println("with crinkly bindlewurdles,");
+    tft.println("Or I will rend thee");
+    tft.println("in the gobberwarts");
+    tft.println("with my blurglecruncheon,");
+    tft.println("see if I don't!");
+    return micros() - start;
+}
 
 void OnPress(int key)
 {
