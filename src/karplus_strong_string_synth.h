@@ -3,15 +3,26 @@
 #include <Arduino.h>
 #include <AudioStream.h>
 #include <utility/dspinst.h>
+#include <ILI9341_t3.h>
+#include <font_Arial.h>
+#include <SPI.h>
 
 #define NUM_SAMPLES 512
+
+// TFT Display pins (from main.cpp comments)
+#define TFT_CS   10
+#define TFT_DC   9
+// MOSI (11), SCK (13), MISO (12) are handled by SPI library
 
 class KarplusStrongStringSynth : public AudioStream
 {
 public:
-	KarplusStrongStringSynth() : AudioStream(0, NULL)
+	KarplusStrongStringSynth(ILI9341_t3* display = nullptr) : AudioStream(0, NULL), tft(display)
 	{
 		state = 0;
+		if (tft) {
+			tftInitialized = true;
+		}
 	}
 	int noteOn(float freq, float velocity)
 	{
@@ -60,6 +71,8 @@ public:
 	}
 	virtual void update(void);
 	void fillIfNecessary(uint16_t attenuationScaled, uint16_t filterScaled);
+	void drawBufferGraph(int bufferIndex);
+	void setTFTDisplay(ILI9341_t3* display);
 	void updateFrequency(float newFreq)
 	{
 		frequency = newFreq;
@@ -67,21 +80,32 @@ public:
 		calculateDelayIncrement();
 	}
 
-private:
+	// Public access for threading (needed by non-member thread function)
+	volatile bool displayUpdateRequested = false;
+	volatile int displayBufferIndex = 0;
+	int displayThreadId = -1;
+	bool tftInitialized = false;
+	ILI9341_t3* tft;
 	uint8_t state; // 0=off, 1=begin on next update, 2=playing
+	
+	// Public access for display drawing
 	uint16_t bufferLen;
+	int16_t buffers[2][NUM_SAMPLES];
+	int32_t bufferGeneration[2];
+	float frequency;			  // Target frequency in Hz
+
+private:
 	uint16_t bufferIndex;
 	uint16_t whichBuffer;
 	int32_t initialAmplitude;
 	uint16_t attenuation = 103;	 // Reasonable starting point
 	uint16_t filterStrength = 0; // Equal mix of old and new
 	static uint32_t seed;		 // must start at 1
-	int16_t buffers[2][NUM_SAMPLES];
-	int32_t bufferGeneration[2];
 
-	float frequency;			  // Target frequency in Hz
 	uint32_t bufferPosition;	  // 16.16 fixed-point position in buffer
 	uint32_t delayIncrementFixed; // 16.16 fixed-point increment per sample
+
+	// Display update control - removed from here as they are now public
 
 	void fillBuffer(uint16_t fromBuffer, uint16_t attenuation, uint16_t filter);
 	void calculateDelayIncrement()
@@ -93,5 +117,8 @@ private:
 		delayIncrementFixed = (uint32_t)(delayIncrement * 65536.0f);
 	}
 };
+
+// Non-member function for background display updates
+void displayUpdateThread(KarplusStrongStringSynth* synthInstance);
 
 #endif

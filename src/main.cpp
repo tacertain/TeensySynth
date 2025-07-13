@@ -5,7 +5,11 @@
 #include "USBHost_t36.h"
 #include <synth_karplusstrong.h>
 #include <output_i2s.h>
-#include "Synthesizer.h"
+#include <SD.h>
+#include <ILI9341_t3.h>
+#include <font_Arial.h>
+#include <SPI.h>
+#include "HybridSynthesizer.h"  // Use the new hybrid synthesizer
 
 /**
  * Pin usage:
@@ -24,7 +28,14 @@
  * DIN: 7
  */
 
-Synthesizer synth;
+// TFT Display pins
+#define TFT_CS   10
+#define TFT_DC   9
+
+// Global TFT object
+ILI9341_t3 tft(TFT_CS, TFT_DC);
+
+HybridSynthesizer synth;  // Use the new hybrid synthesizer
 
 USBHost myusb;
 KeyboardController keyboard1(myusb);
@@ -50,15 +61,57 @@ void setup()
     midi1.setHandleNoteOn(OnNoteOn);
     midi1.setHandleControlChange(OnControlChange);
     midi1.setHandlePitchChange(OnPitchChange); 
-    AudioMemory(15);
+    AudioMemory(20);  // Increased for soundfont player
 
+    Serial.println("Hello, world!");
+    Serial8.begin(400000, SERIAL_8N1);
+
+    // Initialize TFT Display
+    Serial.println("Initializing TFT display...");
+    tft.begin();
+    tft.setRotation(3); // Landscape mode (320x240)
+    tft.fillScreen(ILI9341_BLACK);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setFont(Arial_12);
+    tft.setCursor(0, 0);
+    tft.println("Karplus-Strong Buffer Visualizer");
+    tft.drawLine(0, 20, tft.width()-1, 20, ILI9341_WHITE);
+    tft.setCursor(0, 25);
+    tft.setFont(Arial_10);
+    tft.println("String 0 will display buffer graphs");
+    Serial.println("TFT display initialized");
+    
+    // Set the first string synthesizer to use the TFT display
+    synth.getString(0).setTFTDisplay(&tft);
+    Serial.println("TFT display assigned to string synthesizer 0");
+
+    // Initialize SD card for soundfont loading
+    if (!SD.begin(BUILTIN_SDCARD)) {
+        Serial.println("SD card initialization failed - soundfonts will not be available");
+    } else {
+        Serial.println("SD card initialized");
+        
+        // Try to load a soundfont file
+        if (synth.loadSoundfont("piano.sf2")) {
+            Serial.println("Soundfont loaded successfully");
+            // Switch to soundfont mode (or use layered/split mode)
+            // synth.setSynthMode(HybridSynthesizer::SOUNDFONT_ONLY);
+            // synth.setSynthMode(HybridSynthesizer::LAYERED);
+        } else {
+            Serial.println("Failed to load soundfont, using string synthesis only");
+        }
+    }
 }
-
 
 void loop()
 {
-	myusb.Task();
-	midi1.read();
+    static uint64_t i = 0;
+    if (++i % 1000000 == 0) {
+        Serial.print("Alive ");
+        Serial.println(i / 1000000);
+    }
+    myusb.Task();
+    midi1.read();
 }
 
 
@@ -114,7 +167,7 @@ void OnNoteOff(byte channel, byte note, byte velocity)
 	Serial.print(channel);
 	Serial.print(", note=");
 	Serial.print(note);
-	Serial.println();
+	Serial.println(); 
 	synth.noteOff(note); 
 
 }
@@ -137,7 +190,41 @@ void OnControlChange(byte channel, byte control, byte value)
     }
 
     if(channel == 1 && control == 7) {
-        synth.setVolume((float)value / 127.0f);
+        synth.setMasterVolume((float)value / 127.0f);  // Updated method name
+    }
+    
+    // New controls for hybrid synthesizer
+    if(channel == 1 && control == 23) {
+        synth.setStringVolume((float)value / 127.0f);
+    }
+    
+    if(channel == 1 && control == 24) {
+        synth.setSoundfontVolume((float)value / 127.0f);
+    }
+    
+    // Synthesis mode switching (CC 25)
+    if(channel == 1 && control == 25) {
+        if (value < 32) {
+            synth.setSynthMode(HybridSynthesizer::STRINGS_ONLY);
+            Serial.println("Switched to Strings Only mode");
+        } else if (value < 64) {
+            synth.setSynthMode(HybridSynthesizer::SOUNDFONT_ONLY);
+            Serial.println("Switched to Soundfont Only mode");
+        } else if (value < 96) {
+            synth.setSynthMode(HybridSynthesizer::LAYERED);
+            Serial.println("Switched to Layered mode");
+        } else {
+            synth.setSynthMode(HybridSynthesizer::SPLIT);
+            Serial.println("Switched to Split mode");
+        }
+    }
+    
+    // Split point control (CC 26)
+    if(channel == 1 && control == 26) {
+        uint8_t splitNote = 36 + (value * 48 / 127); // Map to C2-C6 range
+        synth.setSplitPoint(splitNote);
+        Serial.print("Split point set to note ");
+        Serial.println(splitNote);
     }
 
     if(channel == 1 && control == 51 && value == 127) {

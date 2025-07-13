@@ -4,5 +4,17 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.associations": {
+			"compare": "cpp",
+			"random": "cpp",
+			"limits": "cpp",
+			"new": "cpp",
+			"numeric": "cpp",
+			"cmath": "cpp",
+			"tuple": "cpp",
+			"type_traits": "cpp",
+			"utility": "cpp"
+		}
+	}
 }

@@ -1,5 +1,13 @@
 #include <Arduino.h>
 #include "karplus_strong_string_synth.h"
+#include <TeensyThreads.h>
+
+// Global static pointer to hold the instance for the thread
+static KarplusStrongStringSynth* threadInstance = nullptr;
+
+// Forward declarations
+void displayThreadWrapper();
+void displayUpdateThread(KarplusStrongStringSynth* synthInstance);
 
 static uint32_t pseudorand(uint32_t lo)
 {
@@ -31,6 +39,16 @@ void KarplusStrongStringSynth::fillBuffer(uint16_t fromBuffer, uint16_t attenuat
 		*to = out;
 	}
 	bufferGeneration[(fromBuffer + 1) % 2] = bufferGeneration[fromBuffer % 2] + fromBuffer % 2;
+	
+	// Request background display update instead of blocking audio
+	if (tftInitialized && tft) {
+		if (displayThreadId == -1) {
+			threadInstance = this; // Set the static instance pointer
+			displayThreadId = threads.addThread(displayThreadWrapper);
+		}
+		displayBufferIndex = (fromBuffer + 1) % 2;
+		displayUpdateRequested = true;
+	}
 }
 
 void KarplusStrongStringSynth::update(void)
@@ -47,8 +65,6 @@ void KarplusStrongStringSynth::update(void)
 
 	float timeBasedFilter = pow((float)filterStrength / 127.0f, 100.0f / frequency);
 	uint16_t filterScaled = 65535 - (uint16_t)(timeBasedFilter * 32767.0f);
-
-	uint16_t num_iter = (uint16_t)(-1.0f / log2f((float)filterScaled));
 
 	if (state == 1)
 	{
@@ -139,4 +155,89 @@ void KarplusStrongStringSynth::fillIfNecessary(uint16_t attenuationScaled, uint1
 	}
 }
 
+
+
 uint32_t KarplusStrongStringSynth::seed = 1;
+
+void KarplusStrongStringSynth::setTFTDisplay(ILI9341_t3* display)
+{
+	tft = display;
+	tftInitialized = (display != nullptr);
+}
+
+// Wrapper function for thread creation
+void displayThreadWrapper() {
+	if (threadInstance) {
+		displayUpdateThread(threadInstance);
+	}
+}
+
+// Non-member function for background display updates
+void displayUpdateThread(KarplusStrongStringSynth* synthInstance)
+{
+	threadInstance = synthInstance; // Set the static instance pointer
+
+	while (1) {
+		if (synthInstance && synthInstance->displayUpdateRequested) {
+			// Copy the buffer data to avoid race conditions
+			int bufferIndex = synthInstance->displayBufferIndex;
+			
+			// Clear the request flag immediately to avoid missing updates
+			synthInstance->displayUpdateRequested = false;
+			
+			// Now safely draw the buffer graph
+			if (synthInstance->tftInitialized && synthInstance->tft && synthInstance->state != 0) {
+				synthInstance->drawBufferGraph(bufferIndex);
+			}
+		}
+		threads.delay(5); // Check every 5ms for update requests
+	}
+}
+
+void KarplusStrongStringSynth::drawBufferGraph(int bufferIndex)
+{
+	if (!tftInitialized || !tft) return;
+
+	const int graphY = 30;
+	const int graphHeight = 180;
+	const int graphWidth = tft->width();
+	const int centerY = graphY + graphHeight / 2;
+	
+	// Clear the graph area
+	tft->fillRect(0, graphY, graphWidth, graphHeight, ILI9341_BLACK);
+	
+	// Draw center line
+	tft->drawLine(0, centerY, graphWidth-1, centerY, ILI9341_DARKGREY);
+
+	if (state == 0)
+		return; 
+		
+	// Draw buffer contents
+	int16_t *buffer = buffers[bufferIndex];
+	int prevY = centerY;
+	
+	for (int x = 0; x < graphWidth && x < bufferLen; x++)
+	{
+		// Scale sample value to graph height
+		int32_t sample = buffer[x * bufferLen / graphWidth];
+		int y = centerY - (sample * graphHeight / 2) / 32768;
+		
+		// Clamp y to graph bounds
+		if (y < graphY) y = graphY;
+		if (y > graphY + graphHeight - 1) y = graphY + graphHeight - 1;
+		
+		// Draw line from previous point
+		if (x > 0) {
+			tft->drawLine(x-1, prevY, x, y, ILI9341_GREEN);
+		}
+		prevY = y;
+	}
+	
+	// Show buffer info
+	tft->fillRect(0, graphY + graphHeight + 5, graphWidth, 20, ILI9341_BLACK);
+	tft->setCursor(0, graphY + graphHeight + 5);
+	tft->setTextColor(ILI9341_WHITE);
+	tft->setFont(Arial_10);
+	tft->printf("Buf%d Freq:%.1fHz Len:%d Gen:%d", 
+		bufferIndex, frequency, bufferLen, bufferGeneration[bufferIndex]);
+}
