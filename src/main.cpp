@@ -48,7 +48,9 @@ void OnRawRelease(uint8_t keycode);
 void OnNoteOn(byte channel, byte note, byte velocity);
 void OnNoteOff(byte channel, byte note, byte velocity);
 void OnControlChange(byte channel, byte control, byte value);
-void OnPitchChange(byte channel, int bend); 
+void OnPitchChange(byte channel, int bend);
+
+uint32_t count = 0;
 
 void setup()
 {
@@ -72,13 +74,6 @@ void setup()
     tft.setRotation(3); // Landscape mode (320x240)
     tft.fillScreen(ILI9341_BLACK);
     tft.setTextColor(ILI9341_WHITE);
-    tft.setFont(Arial_12);
-    tft.setCursor(0, 0);
-    tft.println("Karplus-Strong Buffer Visualizer");
-    tft.drawLine(0, 20, tft.width()-1, 20, ILI9341_WHITE);
-    tft.setCursor(0, 25);
-    tft.setFont(Arial_10);
-    tft.println("String 0 will display buffer graphs");
     Serial.println("TFT display initialized");
     
     // Set the first string synthesizer to use the TFT display
@@ -108,7 +103,9 @@ void loop()
     static uint64_t i = 0;
     if (++i % 1000000 == 0) {
         Serial.print("Alive ");
-        Serial.println(i / 1000000);
+        Serial.print(i / 1000000);
+        Serial.print(" ");
+        Serial.println(count);
     }
     myusb.Task();
     midi1.read();

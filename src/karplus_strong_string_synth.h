@@ -70,18 +70,16 @@ public:
 		Serial.println();
 	}
 	virtual void update(void);
-	void fillIfNecessary(uint16_t attenuationScaled, uint16_t filterScaled);
-	void drawBufferGraph(int bufferIndex);
 	void setTFTDisplay(ILI9341_t3* display);
-	void updateFrequency(float newFreq)
-	{
+    void updateLoop();
+    void updateFrequency(float newFreq)
+    {
 		frequency = newFreq;
 
 		calculateDelayIncrement();
 	}
 
 	// Public access for threading (needed by non-member thread function)
-	volatile bool displayUpdateRequested = false;
 	volatile int displayBufferIndex = 0;
 	int displayThreadId = -1;
 	bool tftInitialized = false;
@@ -90,8 +88,8 @@ public:
 	
 	// Public access for display drawing
 	uint16_t bufferLen;
-	int16_t buffers[2][NUM_SAMPLES];
-	int32_t bufferGeneration[2];
+	int16_t buffers[NUM_SAMPLES];
+	int32_t bufferGeneration;
 	float frequency;			  // Target frequency in Hz
 
 private:
@@ -107,7 +105,7 @@ private:
 
 	// Display update control - removed from here as they are now public
 
-	void fillBuffer(uint16_t fromBuffer, uint16_t attenuation, uint16_t filter);
+	void fillBuffer(uint16_t attenuation, uint16_t filter);
 	void calculateDelayIncrement()
 	{
 		float exactDelay = AUDIO_SAMPLE_RATE_EXACT / frequency;
@@ -120,5 +118,8 @@ private:
 
 // Non-member function for background display updates
 void displayUpdateThread(KarplusStrongStringSynth* synthInstance);
+
+// Non-instance function for drawing buffer graph
+void drawBufferGraph(ILI9341_t3* tft, int16_t* buffer, uint16_t bufferLen, float frequency, int32_t bufferGeneration, int bufferIndex);
 
 #endif

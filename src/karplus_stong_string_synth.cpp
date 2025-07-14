@@ -2,13 +2,6 @@
 #include "karplus_strong_string_synth.h"
 #include <TeensyThreads.h>
 
-// Global static pointer to hold the instance for the thread
-static KarplusStrongStringSynth* threadInstance = nullptr;
-
-// Forward declarations
-void displayThreadWrapper();
-void displayUpdateThread(KarplusStrongStringSynth* synthInstance);
-
 static uint32_t pseudorand(uint32_t lo)
 {
 	uint32_t hi;
@@ -21,34 +14,23 @@ static uint32_t pseudorand(uint32_t lo)
 	return lo;
 }
 
-void KarplusStrongStringSynth::fillBuffer(uint16_t fromBuffer, uint16_t attenuation, uint16_t filter)
+void KarplusStrongStringSynth::fillBuffer(uint16_t attenuation, uint16_t filter)
 {
-	int16_t *from = buffers[fromBuffer % 2];
-	int16_t *to = buffers[(fromBuffer + 1) % 2];
 
-	int16_t prior = to[bufferLen - 1];
-	for (int i = 0; i < bufferLen; ++i, ++from, ++to)
+	int16_t prior = buffers[bufferLen - 1];
+	for (int i = 0; i < bufferLen; ++i)
 	{
-		int16_t in = *from;
+		int16_t in = buffers[i];
+		int16_t next = buffers[(i + 1) % bufferLen];
 
-		int16_t interpolated = (((int32_t)in * filter) + ((int32_t)prior * ((1 << 16) - filter))) >> 16;
+		int16_t interpolated = (((int32_t)in * filter) + ((((int32_t)prior + (int32_t)next) * ((1 << 16) - filter)) >> 1)) >> 16;
 
 		int16_t out = ((int32_t)interpolated * attenuation) >> 16;
 
 		prior = in;
-		*to = out;
+		buffers[i] = out;
 	}
-	bufferGeneration[(fromBuffer + 1) % 2] = bufferGeneration[fromBuffer % 2] + fromBuffer % 2;
-	
-	// Request background display update instead of blocking audio
-	if (tftInitialized && tft) {
-		if (displayThreadId == -1) {
-			threadInstance = this; // Set the static instance pointer
-			displayThreadId = threads.addThread(displayThreadWrapper);
-		}
-		displayBufferIndex = (fromBuffer + 1) % 2;
-		displayUpdateRequested = true;
-	}
+	bufferGeneration++;
 }
 
 void KarplusStrongStringSynth::update(void)
@@ -69,18 +51,29 @@ void KarplusStrongStringSynth::update(void)
 	if (state == 1)
 	{
 		uint32_t lo = seed;
+		int32_t sum = 0;
+		
+		// First pass: generate noise and calculate sum for DC removal
 		for (int i = 0; i < bufferLen; i++)
 		{
 			lo = pseudorand(lo);
-			buffers[0][i] = signed_multiply_32x16b(initialAmplitude, lo);
-			buffers[1][i] = signed_multiply_32x16b(initialAmplitude, lo);
+			buffers[i] = signed_multiply_32x16b(initialAmplitude, lo);
+			sum += buffers[i];
 		}
+		
+		// Calculate DC offset
+		int16_t dcOffset = sum / bufferLen;
+		
+		// Second pass: remove DC component
+		for (int i = 0; i < bufferLen; i++)
+		{
+			buffers[i] -= dcOffset;
+		}
+		
 		seed = lo;
 		state = 2;
 		whichBuffer = 0;
-		bufferGeneration[0] = 0;
-		bufferGeneration[1] = -1;
-		fillBuffer(0, attenuationScaled, filterScaled);
+		bufferGeneration = 0;
 
 		Serial.printf("bufferLen = %d\n", bufferLen);
 		Serial.printf("attentuation = %d, pow(%.3f, %.3f) = %.3f\n",
@@ -112,20 +105,10 @@ void KarplusStrongStringSynth::update(void)
 		uint32_t fracPart = bufferPosition & 0xFFFF; // Fractional part (0-65535)
 
 		// Get the two samples to interpolate between
-		int16_t sample1 = buffers[whichBuffer][intPos];
-
-		int16_t sample2;
-		// Sample2 might be beyond the buffer end, so we will need to recompule
-		if (intPos + 1 >= bufferLen)
-		{
-			// fillIfNecessary(attenuationScaled, filterScaled);
-			sample2 = buffers[(whichBuffer + 1) % 2][intPos + 1];
-		}
-		else
-			sample2 = buffers[whichBuffer][intPos + 1];
+		int16_t sample1 = buffers[intPos];
+		int16_t sample2 = buffers[(intPos + 1) % bufferLen];
 
 		// Linear interpolation using fixed-point math
-		// interpolated = sample1 + (sample2 - sample1) * fracPart / 65536
 		int32_t diff = sample2 - sample1;
 		int32_t interpolated = sample1 + ((diff * fracPart) >> 16);
 
@@ -137,8 +120,7 @@ void KarplusStrongStringSynth::update(void)
 		// Check if we've completed a full buffer cycle
 		if ((bufferPosition >> 16) >= bufferLen)
 		{
-			fillIfNecessary(attenuationScaled, filterScaled);
-			whichBuffer = (whichBuffer ^ 0x1) & 0x1;
+			fillBuffer(attenuationScaled, filterScaled);
 			bufferPosition -= (bufferLen << 16); // Subtract buffer length in fixed-point
 		}
 	}
@@ -146,60 +128,64 @@ void KarplusStrongStringSynth::update(void)
 	release(block);
 }
 
-void KarplusStrongStringSynth::fillIfNecessary(uint16_t attenuationScaled, uint16_t filterScaled)
-{
-	if ((whichBuffer == 0 && bufferGeneration[1] < bufferGeneration[0]) ||
-		(whichBuffer == 1 && bufferGeneration[0] <= bufferGeneration[1]))
-	{
-		fillBuffer(whichBuffer, attenuationScaled, filterScaled);
-	}
-}
-
-
-
 uint32_t KarplusStrongStringSynth::seed = 1;
+
+void displayUpdateWrapper(void *arg);
+void displayUpdateThread(void *arg);
+void drawBufferGraph(ILI9341_t3 *tft, int16_t *buffer, uint16_t bufferLen, float frequency, int32_t bufferGeneration);
 
 void KarplusStrongStringSynth::setTFTDisplay(ILI9341_t3* display)
 {
 	tft = display;
 	tftInitialized = (display != nullptr);
-}
 
-// Wrapper function for thread creation
-void displayThreadWrapper() {
-	if (threadInstance) {
-		displayUpdateThread(threadInstance);
+	// Request background display update instead of blocking audio
+	if (tftInitialized && tft)
+	{
+		if (displayThreadId == -1)
+		{
+			displayThreadId = threads.addThread(displayUpdateWrapper, (void *)this, 1<<15);
+		}
 	}
 }
 
 // Non-member function for background display updates
-void displayUpdateThread(KarplusStrongStringSynth* synthInstance)
+void displayUpdateWrapper(void *arg)
 {
-	threadInstance = synthInstance; // Set the static instance pointer
+	KarplusStrongStringSynth *synthInstance = (KarplusStrongStringSynth *)arg;
+	synthInstance->updateLoop();
+}
 
-	while (1) {
-		if (synthInstance && synthInstance->displayUpdateRequested) {
-			// Copy the buffer data to avoid race conditions
-			int bufferIndex = synthInstance->displayBufferIndex;
-			
-			// Clear the request flag immediately to avoid missing updates
-			synthInstance->displayUpdateRequested = false;
-			
-			// Now safely draw the buffer graph
-			if (synthInstance->tftInitialized && synthInstance->tft && synthInstance->state != 0) {
-				synthInstance->drawBufferGraph(bufferIndex);
-			}
+extern uint32_t count;
+
+void KarplusStrongStringSynth::updateLoop()
+{
+	int16_t *buffer = new int16_t[NUM_SAMPLES];
+	while (1)
+	{
+		if (state != 0) {
+			memcpy(buffer, buffers, NUM_SAMPLES * sizeof(buffer[0]));
+			drawBufferGraph(tft,
+							buffer,
+							bufferLen,
+							frequency,
+							bufferGeneration);
+			count = 1000000;
 		}
-		threads.delay(5); // Check every 5ms for update requests
+		count++;
+		threads.yield();
+		count++;
 	}
 }
 
-void KarplusStrongStringSynth::drawBufferGraph(int bufferIndex)
-{
-	if (!tftInitialized || !tft) return;
 
-	const int graphY = 30;
-	const int graphHeight = 180;
+// Non-instance function for drawing buffer graph
+void drawBufferGraph(ILI9341_t3* tft, int16_t* buffer, uint16_t bufferLen, float frequency, int32_t bufferGeneration)
+{
+	if (!tft || !buffer) return;
+
+	const int graphY = 0;
+	const int graphHeight = tft->height();
 	const int graphWidth = tft->width();
 	const int centerY = graphY + graphHeight / 2;
 	
@@ -209,11 +195,7 @@ void KarplusStrongStringSynth::drawBufferGraph(int bufferIndex)
 	// Draw center line
 	tft->drawLine(0, centerY, graphWidth-1, centerY, ILI9341_DARKGREY);
 
-	if (state == 0)
-		return; 
-		
 	// Draw buffer contents
-	int16_t *buffer = buffers[bufferIndex];
 	int prevY = centerY;
 	
 	for (int x = 0; x < graphWidth && x < bufferLen; x++)
@@ -238,6 +220,5 @@ void KarplusStrongStringSynth::drawBufferGraph(int bufferIndex)
 	tft->setCursor(0, graphY + graphHeight + 5);
 	tft->setTextColor(ILI9341_WHITE);
 	tft->setFont(Arial_10);
-	tft->printf("Buf%d Freq:%.1fHz Len:%d Gen:%d", 
-		bufferIndex, frequency, bufferLen, bufferGeneration[bufferIndex]);
+	tft->printf("Freq:%.1fHz Len:%d Gen:%d", frequency, bufferLen, bufferGeneration);
 }
