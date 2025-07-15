@@ -14,7 +14,7 @@ static uint32_t pseudorand(uint32_t lo)
 	return lo;
 }
 
-void KarplusStrongStringSynth::fillBuffer(uint16_t attenuation, uint16_t filter)
+void KarplusStrongStringSynth::updateSamples(uint16_t attenuation, uint16_t filter)
 {
 
 	int16_t prior = buffers[bufferLen - 1];
@@ -120,7 +120,7 @@ void KarplusStrongStringSynth::update(void)
 		// Check if we've completed a full buffer cycle
 		if ((bufferPosition >> 16) >= bufferLen)
 		{
-			fillBuffer(attenuationScaled, filterScaled);
+			updateSamples(attenuationScaled, filterScaled);
 			bufferPosition -= (bufferLen << 16); // Subtract buffer length in fixed-point
 		}
 	}
@@ -170,11 +170,8 @@ void KarplusStrongStringSynth::updateLoop()
 							bufferLen,
 							frequency,
 							bufferGeneration);
-			count = 1000000;
 		}
-		count++;
 		threads.yield();
-		count++;
 	}
 }
 
@@ -185,7 +182,7 @@ void drawBufferGraph(ILI9341_t3* tft, int16_t* buffer, uint16_t bufferLen, float
 	if (!tft || !buffer) return;
 
 	const int graphY = 0;
-	const int graphHeight = tft->height();
+	const int graphHeight = tft->height() - 20;
 	const int graphWidth = tft->width();
 	const int centerY = graphY + graphHeight / 2;
 	

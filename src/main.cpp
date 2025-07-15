@@ -100,6 +100,7 @@ void setup()
 
 void loop()
 {
+    #if 0
     static uint64_t i = 0;
     if (++i % 1000000 == 0) {
         Serial.print("Alive ");
@@ -107,6 +108,7 @@ void loop()
         Serial.print(" ");
         Serial.println(count);
     }
+    #endif
     myusb.Task();
     midi1.read();
 }

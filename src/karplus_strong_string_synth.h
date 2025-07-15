@@ -96,8 +96,8 @@ private:
 	uint16_t bufferIndex;
 	uint16_t whichBuffer;
 	int32_t initialAmplitude;
-	uint16_t attenuation = 103;	 // Reasonable starting point
-	uint16_t filterStrength = 0; // Equal mix of old and new
+	uint16_t attenuation = 66;	 // Reasonable starting point
+	uint16_t filterStrength = 103; 
 	static uint32_t seed;		 // must start at 1
 
 	uint32_t bufferPosition;	  // 16.16 fixed-point position in buffer
@@ -105,7 +105,7 @@ private:
 
 	// Display update control - removed from here as they are now public
 
-	void fillBuffer(uint16_t attenuation, uint16_t filter);
+	void updateSamples(uint16_t attenuation, uint16_t filter);
 	void calculateDelayIncrement()
 	{
 		float exactDelay = AUDIO_SAMPLE_RATE_EXACT / frequency;
