@@ -3,34 +3,34 @@
 #include <Audio.h>
 #include <map>
 #include "karplus_strong_string_synth.h"
-#include "SoundfontPlayer.h"
+#include "SF2PlayerAdapter.h"
 
 class HybridSynthesizer {
 public:
     enum SynthMode {
         STRINGS_ONLY,
-        SOUNDFONT_ONLY,
+        SF2_ONLY,
         LAYERED,      // Both playing together
-        SPLIT         // Keyboard split (low=strings, high=soundfont)
+        SPLIT         // Keyboard split (low=strings, high=SF2)
     };
 
 private:
     // Karplus-Strong string synthesis
     KarplusStrongStringSynth strings[8];
     
-    // Soundfont player
-    SoundfontPlayer soundfont;
+    // SF2 player
+    SF2PlayerAdapter sf2Player;
     
     // Audio mixing and output
-    AudioMixer4 mixerL1, mixerL2, mixerL3;  // Added mixerL3 for soundfont
-    AudioMixer4 mixerR1, mixerR2, mixerR3;  // Added mixerR3 for soundfont
+    AudioMixer4 mixerL1, mixerL2, mixerL3;  // Added mixerL3 for SF2
+    AudioMixer4 mixerR1, mixerR2, mixerR3;  // Added mixerR3 for SF2
     AudioMixer4 sumL, sumR;
     AudioOutputI2S i2s1;
     
     // Audio connections
     AudioConnection* stringPatchCords[16]; // 8 for L, 8 for R (strings)
-    AudioConnection* soundfontPatchCordL;  // Soundfont to mixer
-    AudioConnection* soundfontPatchCordR;  // Soundfont to mixer
+    AudioConnection* sf2PatchCordL;  // SF2 to mixer
+    AudioConnection* sf2PatchCordR;  // SF2 to mixer
     AudioConnection* patchCordSumL1, *patchCordSumL2, *patchCordSumL3;
     AudioConnection* patchCordSumR1, *patchCordSumR2, *patchCordSumR3;
     AudioConnection* patchCordL;
@@ -41,15 +41,15 @@ private:
     float pitchBendFactor = 1.0f; // Current pitch bend multiplier
     float masterVolume = 1.0f;
     float stringVolume = 1.0f;
-    float soundfontVolume = 1.0f;
+    float sf2Volume = 1.0f;
     
     SynthMode currentMode = STRINGS_ONLY;
     uint8_t splitPoint = 60; // Middle C
 
 public:
     HybridSynthesizer() :
-        soundfontPatchCordL(nullptr),
-        soundfontPatchCordR(nullptr),
+        sf2PatchCordL(nullptr),
+        sf2PatchCordR(nullptr),
         patchCordSumL1(nullptr), patchCordSumL2(nullptr), patchCordSumL3(nullptr),
         patchCordSumR1(nullptr), patchCordSumR2(nullptr), patchCordSumR3(nullptr),
         patchCordL(nullptr),
@@ -67,9 +67,9 @@ public:
             stringPatchCords[i + 8] = new AudioConnection(strings[i], 0, mixerR2, i - 4);
         }
         
-        // Connect soundfont to mixerL3 and mixerR3
-        soundfontPatchCordL = new AudioConnection(soundfont, 0, mixerL3, 0);
-        soundfontPatchCordR = new AudioConnection(soundfont, 0, mixerR3, 0);
+        // Connect SF2 player to mixerL3 and mixerR3
+        sf2PatchCordL = new AudioConnection(sf2Player, 0, mixerL3, 0);
+        sf2PatchCordR = new AudioConnection(sf2Player, 1, mixerR3, 0);
         
         // Sum all mixers
         patchCordSumL1 = new AudioConnection(mixerL1, 0, sumL, 0);
@@ -90,8 +90,8 @@ public:
 
     ~HybridSynthesizer() {
         for (int i = 0; i < 16; ++i) delete stringPatchCords[i];
-        delete soundfontPatchCordL;
-        delete soundfontPatchCordR;
+        delete sf2PatchCordL;
+        delete sf2PatchCordR;
         delete patchCordSumL1;
         delete patchCordSumL2;
         delete patchCordSumL3;
@@ -102,9 +102,9 @@ public:
         delete patchCordR;
     }
     
-    // Soundfont management
-    bool loadSoundfont(const char* filename) {
-        return soundfont.loadSoundfont(filename);
+    // SF2 management
+    bool loadSF2(const char* filename) {
+        return sf2Player.loadSF2(filename);
     }
     
     // Synthesis mode control
@@ -126,31 +126,31 @@ public:
         updateMixerGains();
     }
     
-    void setSoundfontVolume(float volume) {
-        soundfontVolume = volume;
+    void setSF2Volume(float volume) {
+        sf2Volume = volume;
         updateMixerGains();
     }
 
     void noteOn(int key, float freq, float velocity) {
         bool playStrings = false;
-        bool playSoundfont = false;
+        bool playSF2 = false;
         
         switch (currentMode) {
             case STRINGS_ONLY:
                 playStrings = true;
                 break;
-            case SOUNDFONT_ONLY:
-                playSoundfont = true;
+            case SF2_ONLY:
+                playSF2 = true;
                 break;
             case LAYERED:
                 playStrings = true;
-                playSoundfont = true;
+                playSF2 = true;
                 break;
             case SPLIT:
                 if (key < splitPoint) {
                     playStrings = true;
                 } else {
-                    playSoundfont = true;
+                    playSF2 = true;
                 }
                 break;
         }
@@ -159,8 +159,8 @@ public:
             playStringNote(key, freq, velocity);
         }
         
-        if (playSoundfont) {
-            soundfont.noteOn(0, key, (uint8_t)(velocity * 127.0f));
+        if (playSF2) {
+            sf2Player.noteOn(0, key, (uint8_t)(velocity * 127.0f));
         }
     }
 
@@ -174,7 +174,7 @@ public:
             keyToBaseFreq.erase(key);
         }
         
-        soundfont.noteOff(0, key);
+        sf2Player.noteOff(0, key);
     }
 
     void setPitchBend(float bendAmount) {
@@ -189,8 +189,8 @@ public:
             strings[stringIndex].updateFrequency(baseFreq * pitchBendFactor);
         }
         
-        // Apply bend to soundfont
-        soundfont.setPitchBend(0, bendAmount);
+        // Apply bend to SF2 player
+        sf2Player.setPitchBend(0, bendAmount);
     }
 
     // String-specific controls (for backwards compatibility)
@@ -207,7 +207,7 @@ public:
     }
     
     // Direct access to components
-    SoundfontPlayer& getSoundfontPlayer() { return soundfont; }
+    SF2PlayerAdapter& getSF2Player() { return sf2Player; }
     KarplusStrongStringSynth& getString(int index) { 
         if (index >= 0 && index < 8) return strings[index];
         return strings[0]; // Return first string as fallback
@@ -237,24 +237,24 @@ private:
     
     void updateMixerGains() {
         float stringGain = 0.0f;
-        float soundfontGain = 0.0f;
+        float sf2Gain = 0.0f;
         
         switch (currentMode) {
             case STRINGS_ONLY:
                 stringGain = masterVolume * stringVolume;
-                soundfontGain = 0.0f;
+                sf2Gain = 0.0f;
                 break;
-            case SOUNDFONT_ONLY:
+            case SF2_ONLY:
                 stringGain = 0.0f;
-                soundfontGain = masterVolume * soundfontVolume;
+                sf2Gain = masterVolume * sf2Volume;
                 break;
             case LAYERED:
                 stringGain = masterVolume * stringVolume * 0.7f; // Reduce to avoid clipping
-                soundfontGain = masterVolume * soundfontVolume * 0.7f;
+                sf2Gain = masterVolume * sf2Volume * 0.7f;
                 break;
             case SPLIT:
                 stringGain = masterVolume * stringVolume;
-                soundfontGain = masterVolume * soundfontVolume;
+                sf2Gain = masterVolume * sf2Volume;
                 break;
         }
         
@@ -266,9 +266,9 @@ private:
             mixerR2.gain(i, stringGain);
         }
         
-        // Apply soundfont gains
-        mixerL3.gain(0, soundfontGain);
-        mixerR3.gain(0, soundfontGain);
+        // Apply SF2 gains
+        mixerL3.gain(0, sf2Gain);
+        mixerR3.gain(0, sf2Gain);
         
         // Sum mixer gains
         sumL.gain(0, 1.0f); // mixerL1
@@ -279,6 +279,7 @@ private:
         sumR.gain(1, 1.0f); // mixerR2
         sumR.gain(2, 1.0f); // mixerR3
         
-        soundfont.setVolume(soundfontGain);
+        // Note: SF2PlayerAdapter doesn't have a setVolume method like the old soundfont player
+        // Volume control is handled through the mixer gains above
     }
 };

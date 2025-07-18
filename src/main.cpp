@@ -49,6 +49,7 @@ void OnNoteOn(byte channel, byte note, byte velocity);
 void OnNoteOff(byte channel, byte note, byte velocity);
 void OnControlChange(byte channel, byte control, byte value);
 void OnPitchChange(byte channel, int bend);
+void OnProgramChange(byte channel, byte program);
 
 uint32_t count = 0;
 
@@ -62,8 +63,9 @@ void setup()
     midi1.setHandleNoteOff(OnNoteOff);
     midi1.setHandleNoteOn(OnNoteOn);
     midi1.setHandleControlChange(OnControlChange);
-    midi1.setHandlePitchChange(OnPitchChange); 
-    AudioMemory(20);  // Increased for soundfont player
+    midi1.setHandlePitchChange(OnPitchChange);
+    midi1.setHandleProgramChange(OnProgramChange); 
+    AudioMemory(20);  // Increased for SF2 player
 
     Serial.println("Hello, world!");
     Serial8.begin(400000, SERIAL_8N1);
@@ -80,20 +82,38 @@ void setup()
     synth.getString(0).setTFTDisplay(&tft);
     Serial.println("TFT display assigned to string synthesizer 0");
 
-    // Initialize SD card for soundfont loading
+    // Initialize SD card for SF2 loading
     if (!SD.begin(BUILTIN_SDCARD)) {
-        Serial.println("SD card initialization failed - soundfonts will not be available");
+        Serial.println("SD card initialization failed - SF2 files will not be available");
     } else {
         Serial.println("SD card initialized");
-        
-        // Try to load a soundfont file
-        if (synth.loadSoundfont("piano.sf2")) {
-            Serial.println("Soundfont loaded successfully");
-            // Switch to soundfont mode (or use layered/split mode)
-            // synth.setSynthMode(HybridSynthesizer::SOUNDFONT_ONLY);
+
+        const char *sf2Filename = "piano.sf2";
+        File sf2File = SD.open(sf2Filename);
+
+        // Try to load an SF2 file
+        if (synth.loadSF2("piano.sf2")) {
+            Serial.println("SF2 file loaded successfully");
+            
+            // Display available presets
+            int numPresets = synth.getSF2Player().getNumPresets();
+            Serial.print("Available presets: ");
+            Serial.println(numPresets);
+            for (int i = 0; i < numPresets && i < 10; i++) {  // Show first 10 presets
+                Serial.print("  ");
+                Serial.print(i);
+                Serial.print(": ");
+                Serial.println(synth.getSF2Player().getPresetName(i).c_str());
+            }
+            if (numPresets > 10) {
+                Serial.println("  ... and more");
+            }
+            
+            // Switch to SF2 mode (or use layered/split mode)
+            // synth.setSynthMode(HybridSynthesizer::SF2_ONLY);
             // synth.setSynthMode(HybridSynthesizer::LAYERED);
         } else {
-            Serial.println("Failed to load soundfont, using string synthesis only");
+            Serial.println("Failed to load SF2 file, using string synthesis only");
         }
     }
 }
@@ -198,7 +218,7 @@ void OnControlChange(byte channel, byte control, byte value)
     }
     
     if(channel == 1 && control == 24) {
-        synth.setSoundfontVolume((float)value / 127.0f);
+        synth.setSF2Volume((float)value / 127.0f);
     }
     
     // Synthesis mode switching (CC 25)
@@ -207,8 +227,8 @@ void OnControlChange(byte channel, byte control, byte value)
             synth.setSynthMode(HybridSynthesizer::STRINGS_ONLY);
             Serial.println("Switched to Strings Only mode");
         } else if (value < 64) {
-            synth.setSynthMode(HybridSynthesizer::SOUNDFONT_ONLY);
-            Serial.println("Switched to Soundfont Only mode");
+            synth.setSynthMode(HybridSynthesizer::SF2_ONLY);
+            Serial.println("Switched to SF2 Only mode");
         } else if (value < 96) {
             synth.setSynthMode(HybridSynthesizer::LAYERED);
             Serial.println("Switched to Layered mode");
@@ -224,6 +244,19 @@ void OnControlChange(byte channel, byte control, byte value)
         synth.setSplitPoint(splitNote);
         Serial.print("Split point set to note ");
         Serial.println(splitNote);
+    }
+    
+    // SF2 Preset selection (CC 27)
+    if(channel == 1 && control == 27) {
+        int numPresets = synth.getSF2Player().getNumPresets();
+        if (numPresets > 0) {
+            int presetIndex = (value * (numPresets - 1)) / 127;
+            synth.getSF2Player().selectPreset(presetIndex);
+            Serial.print("Selected SF2 preset ");
+            Serial.print(presetIndex);
+            Serial.print(": ");
+            Serial.println(synth.getSF2Player().getPresetName(presetIndex).c_str());
+        }
     }
 
     if(channel == 1 && control == 51 && value == 127) {
@@ -246,5 +279,23 @@ void OnPitchChange(byte channel, int bend) // <-- Changed function name
     // Convert MIDI pitch bend (-8192 to +8191) to -4.0-4.0 range
     float bendAmount = (float)bend / 8192.0f * 4.0f;
     synth.setPitchBend(bendAmount);
+}
+
+void OnProgramChange(byte channel, byte program)
+{
+    Serial.print("Program Change, ch=");
+    Serial.print(channel);
+    Serial.print(", program=");
+    Serial.println(program);
+    
+    // Use program change to select SF2 presets
+    int numPresets = synth.getSF2Player().getNumPresets();
+    if (numPresets > 0 && program < numPresets) {
+        synth.getSF2Player().selectPreset(program);
+        Serial.print("Selected SF2 preset ");
+        Serial.print(program);
+        Serial.print(": ");
+        Serial.println(synth.getSF2Player().getPresetName(program).c_str());
+    }
 }
 
