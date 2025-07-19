@@ -132,15 +132,14 @@ uint32_t KarplusStrongStringSynth::seed = 1;
 
 void displayUpdateWrapper(void *arg);
 void displayUpdateThread(void *arg);
-void drawBufferGraph(ILI9341_t3 *tft, int16_t *buffer, uint16_t bufferLen, float frequency, int32_t bufferGeneration);
 
-void KarplusStrongStringSynth::setTFTDisplay(ILI9341_t3* display)
+void KarplusStrongStringSynth::setTFTDisplay(FramebufferGFX* display)
 {
-	tft = display;
+	gfx = display;
 	tftInitialized = (display != nullptr);
 
 	// Request background display update instead of blocking audio
-	if (tftInitialized && tft)
+	if (tftInitialized && gfx)
 	{
 		if (displayThreadId == -1)
 		{
@@ -165,7 +164,7 @@ void KarplusStrongStringSynth::updateLoop()
 	{
 		if (state != 0) {
 			memcpy(buffer, buffers, NUM_SAMPLES * sizeof(buffer[0]));
-			drawBufferGraph(tft,
+			drawBufferGraph(gfx,
 							buffer,
 							bufferLen,
 							frequency,
@@ -177,20 +176,21 @@ void KarplusStrongStringSynth::updateLoop()
 
 
 // Non-instance function for drawing buffer graph
-void drawBufferGraph(ILI9341_t3* tft, int16_t* buffer, uint16_t bufferLen, float frequency, int32_t bufferGeneration)
+void drawBufferGraph(FramebufferGFX* gfx, int16_t* buffer, uint16_t bufferLen, float frequency, int32_t bufferGeneration)
 {
-	if (!tft || !buffer) return;
+	if (!gfx || !buffer) return;
 
+	Serial.println("Start drawBufferGraph");
 	const int graphY = 0;
-	const int graphHeight = tft->height() - 20;
-	const int graphWidth = tft->width();
+	const int graphHeight = gfx->height() - 20;
+	const int graphWidth = gfx->width();
 	const int centerY = graphY + graphHeight / 2;
 	
 	// Clear the graph area
-	tft->fillRect(0, graphY, graphWidth, graphHeight, ILI9341_BLACK);
+	gfx->fillRect(0, graphY, graphWidth, graphHeight, BLACK);
 	
 	// Draw center line
-	tft->drawLine(0, centerY, graphWidth-1, centerY, ILI9341_DARKGREY);
+	gfx->drawLine(0, centerY, graphWidth - 1, centerY, DARKGREY);
 
 	// Draw buffer contents
 	int prevY = centerY;
@@ -207,15 +207,15 @@ void drawBufferGraph(ILI9341_t3* tft, int16_t* buffer, uint16_t bufferLen, float
 		
 		// Draw line from previous point
 		if (x > 0) {
-			tft->drawLine(x-1, prevY, x, y, ILI9341_GREEN);
+			gfx->drawLine(x - 1, prevY, x, y, GREEN);
 		}
 		prevY = y;
 	}
 	
 	// Show buffer info
-	tft->fillRect(0, graphY + graphHeight + 5, graphWidth, 20, ILI9341_BLACK);
-	tft->setCursor(0, graphY + graphHeight + 5);
-	tft->setTextColor(ILI9341_WHITE);
-	tft->setFont(Arial_10);
-	tft->printf("Freq:%.1fHz Len:%d Gen:%d", frequency, bufferLen, bufferGeneration);
+	gfx->fillRect(0, graphY + graphHeight + 5, graphWidth, 20, BLACK);
+	gfx->setCursor(0, graphY + graphHeight + 5);
+	gfx->setTextColor(WHITE);
+	gfx->printf("Freq:%.1fHz Len:%d Gen:%d", frequency, bufferLen, bufferGeneration);
+	Serial.println("Left drawBufferGraph");
 }

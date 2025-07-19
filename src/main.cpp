@@ -1,15 +1,12 @@
-// Simple test of USB Host
-//
-// This example is in the public domain
-
 #include "USBHost_t36.h"
 #include <synth_karplusstrong.h>
 #include <output_i2s.h>
 #include <SD.h>
-#include <ILI9341_t3.h>
-#include <font_Arial.h>
+#include <Adafruit_GFX.h>
+#include <ILI9341_t4.h>
 #include <SPI.h>
-#include "HybridSynthesizer.h"  // Use the new hybrid synthesizer
+#include "HybridSynthesizer.h"
+#include "FrameBufferGFX.h"
 
 /**
  * Pin usage:
@@ -29,11 +26,18 @@
  */
 
 // TFT Display pins
-#define TFT_CS   10
-#define TFT_DC   9
+#define TFT_TIRQ 6
+#define TFT_TCS 8
+#define TFT_DC 9
+#define TFT_CS 10
+#define TFT_MOSI 11
+#define TFT_MISO 12
+#define TFT_SCK 13
+#define TFT_RST 255
+
 
 // Global TFT object
-ILI9341_t3 tft(TFT_CS, TFT_DC);
+ILI9341_T4::ILI9341Driver tft(TFT_CS, TFT_DC, TFT_SCK, TFT_MOSI, TFT_MISO, TFT_RST, TFT_TCS, TFT_TIRQ);
 
 HybridSynthesizer synth;  // Use the new hybrid synthesizer
 
@@ -51,6 +55,11 @@ void OnControlChange(byte channel, byte control, byte value);
 void OnPitchChange(byte channel, int bend);
 
 uint32_t count = 0;
+uint16_t fb[240 * 320];
+DMAMEM uint16_t fb_internal[240*320];
+ILI9341_T4::DiffBuffStatic<4096> diff1; // a first diff buffer with 4K memory (statically allocated)
+ILI9341_T4::DiffBuffStatic<4096> diff2;
+FramebufferGFX gfx(fb, 240, 320);
 
 void setup()
 {
@@ -71,13 +80,20 @@ void setup()
     // Initialize TFT Display
     Serial.println("Initializing TFT display...");
     tft.begin();
-    tft.setRotation(3); // Landscape mode (320x240)
-    tft.fillScreen(ILI9341_BLACK);
-    tft.setTextColor(ILI9341_WHITE);
+    tft.setRotation(0); // Landscape mode (320x240)
+    tft.setFramebuffer(fb_internal); // registers the internal framebuffer
+    tft.setDiffBuffers(&diff1, &diff2); // registering the 2 diff buffers. This activates differential update mode
+    tft.setRefreshRate(10);            // set the display refresh rate around 120Hz
+    tft.setVSyncSpacing(2);            // enable vsync and set framerate = refreshrate/2 (typical choice)
+
+    gfx.fillScreen(BLACK);
+    gfx.setTextColor(WHITE);
+    gfx.setCursor(10, 10);
+    gfx.print("Hello from GFX!");
     Serial.println("TFT display initialized");
     
     // Set the first string synthesizer to use the TFT display
-    synth.getString(0).setTFTDisplay(&tft);
+    synth.getString(0).setTFTDisplay(&gfx);
     Serial.println("TFT display assigned to string synthesizer 0");
 
     // Initialize SD card for soundfont loading
@@ -100,7 +116,9 @@ void setup()
 
 void loop()
 {
-    #if 0
+    static uint32_t last = micros();
+    uint32_t now = micros();
+#if 0
     static uint64_t i = 0;
     if (++i % 1000000 == 0) {
         Serial.print("Alive ");
@@ -108,11 +126,18 @@ void loop()
         Serial.print(" ");
         Serial.println(count);
     }
-    #endif
+#endif
     myusb.Task();
     midi1.read();
+    //tft.overlayFPS(fb); // optional: draw the current FPS on the top right corner of the framebuffer
+    if (gfx.updated()) {
+        Serial.println("Start frame update");
+        tft.update(fb);
+        last = micros();
+        Serial.printf("Frame update took %dus\n", last - now);
+        gfx.clearUpdate();
+    }
 }
-
 
 void OnPress(int key)
 {

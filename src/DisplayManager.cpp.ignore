@@ -1,0 +1,178 @@
+#include "DisplayManager.h"
+#include <Arduino.h>
+#include <TimeLib.h>
+
+// Static instance pointer for thread callback
+DisplayManager *DisplayManager::instance = nullptr;
+DMAMEM static uint16_t fb_internal_mem[240 * 320];
+static uint16_t fb_mem[240 * 320];
+
+DisplayManager::DisplayManager()
+    : tft(TFT_CS, TFT_DC, TFT_SCK, TFT_MOSI, TFT_MISO, TFT_RST, TFT_TCS, TFT_TIRQ),
+      gfx(fb_mem, 240, 320),
+      displayThreadRunning(false),
+      displayThreadId(-1),
+      redrawRequested(false)
+{
+    instance = this;
+
+    // Clear framebuffers
+    fb = fb_mem;
+    fb_internal = fb_internal_mem;
+}
+
+DisplayManager::~DisplayManager()
+{
+    shutdown();
+    if (instance == this)
+    {
+        instance = nullptr;
+    }
+}
+
+bool DisplayManager::begin()
+{
+    Serial.println("Initializing TFT display...");
+
+    // Initialize TFT Display
+    tft.begin();
+    tft.setRotation(0);              // Portrait mode (240x320)
+    tft.setFramebuffer(fb_internal); // registers the internal framebuffer
+    // tft.setDiffBuffers(&diff1, &diff2); // registering the 2 diff buffers. This activates differential update mode
+    tft.setRefreshRate(10); // set the display refresh rate around 10Hz
+    tft.setVSyncSpacing(2); // enable vsync and set framerate = refreshrate/2
+
+    // Initialize the display with a welcome message
+    gfx.fillScreen(BLACK);
+    gfx.setTextColor(WHITE);
+    gfx.setCursor(10, 10);
+    gfx.print("TeensySynth v1.0");
+    gfx.setCursor(10, 30);
+    gfx.print("Display Ready");
+
+    Serial.printf("TFT display initialized: %d\n", Teensy3Clock.get());
+
+    // Start the display update thread
+    displayThreadId = threads.addThread(displayUpdateThreadStatic, 1024 * 32);
+    if (displayThreadId != -1)
+    {
+        Serial.println("Display update thread started");
+        return true;
+    }
+    else
+    {
+        Serial.println("Failed to start display update thread");
+        return false;
+    }
+}
+
+void DisplayManager::shutdown()
+{
+    if (displayThreadRunning)
+    {
+        displayThreadRunning = false;
+
+        // Give the thread time to exit
+        delay(10);
+
+        // Kill the thread if it's still running
+        if (displayThreadId != -1)
+        {
+            threads.kill(displayThreadId);
+            displayThreadId = -1;
+        }
+    }
+}
+
+void DisplayManager::setRefreshRate(uint8_t rate)
+{
+    tft.setRefreshRate(rate);
+}
+
+void DisplayManager::setVSyncSpacing(uint8_t spacing)
+{
+    tft.setVSyncSpacing(spacing);
+}
+
+void DisplayManager::setRotation(uint8_t rotation)
+{
+    tft.setRotation(rotation);
+}
+
+// Callback management
+void DisplayManager::addDrawCallback(const DrawCallback &callback)
+{
+    Serial.println("About to push");
+    drawCallbacks.push_back(callback);
+    Serial.println("Pushed");
+}
+
+void DisplayManager::removeDrawCallback(const DrawCallback &callback)
+{
+    // Note: std::function doesn't have built-in comparison, so this is a simplified approach
+    // In practice, you might want to use a different mechanism like callback IDs
+    // For now, we'll just clear all callbacks if you need to remove specific ones
+}
+
+void DisplayManager::clearDrawCallbacks()
+{
+    drawCallbacks.clear();
+}
+
+void DisplayManager::requestRedraw()
+{
+    redrawRequested = true;
+}
+
+// Static thread function for TeensyThreads
+void DisplayManager::displayUpdateThreadStatic()
+{
+    if (instance)
+    {
+        instance->displayUpdateThread();
+    }
+}
+
+// Instance thread function
+void DisplayManager::displayUpdateThread()
+{
+    displayThreadRunning = true;
+    bool one_update = false;
+
+    Serial.println("Display update thread running");
+
+    while (displayThreadRunning)
+
+    {
+        // Call all registered draw callbacks
+        auto callbacks = drawCallbacks; // Copy to avoid holding interrupt lock
+
+        for (const auto &callback : callbacks)
+        {
+            if (callback)
+            {
+                callback(&gfx);
+            }
+        }
+        if (gfx.updated())
+        {
+            one_update = true;
+            Serial.println("Start frame update");
+            uint32_t now = micros();
+            // Update the display
+            // tft.overlayFPS(fb); // optional: draw the current FPS on the top right corner of the framebuffer
+            // tft.update(fb);
+            uint32_t elapsed = micros() - now;
+            //Serial.printf("Frame update took %dus\n", elapsed);
+            gfx.clearUpdate();
+        }
+        if (one_update)
+            Serial.println("About to delay");
+        // Small delay to prevent excessive checking
+        threads.delay(1);
+        if (one_update)
+            Serial.println("Done delaying");
+    }
+
+    Serial.println("Display update thread exiting");
+}

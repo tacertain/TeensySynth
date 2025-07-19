@@ -1,0 +1,80 @@
+#ifndef DISPLAY_MANAGER_H
+#define DISPLAY_MANAGER_H
+
+#include <ILI9341_t4.h>
+#include <TeensyThreads.h>
+#include "FrameBufferGFX.h"
+#include <vector>
+#include <functional>
+
+// TFT Display pins
+#define TFT_TIRQ 6
+#define TFT_TCS 8
+#define TFT_DC 9
+#define TFT_CS 10
+#define TFT_MOSI 11
+#define TFT_MISO 12
+#define TFT_SCK 13
+#define TFT_RST 255
+
+class DisplayManager {
+public:
+    // Callback function type for drawing operations
+    using DrawCallback = std::function<void(FramebufferGFX*)>;
+    
+    DisplayManager();
+    ~DisplayManager();
+    
+    // Initialization
+    bool begin();
+    void shutdown();
+    
+    // Get the GFX object for drawing
+    FramebufferGFX* getGFX() { return &gfx; }
+    
+    // Callback management
+    void addDrawCallback(const DrawCallback& callback);
+    void removeDrawCallback(const DrawCallback& callback);
+    void clearDrawCallbacks();
+    
+    // Manual drawing trigger (forces a redraw even if not updated)
+    void requestRedraw();
+    
+    // Display control
+    void setRefreshRate(uint8_t rate);
+    void setVSyncSpacing(uint8_t spacing);
+    void setRotation(uint8_t rotation);
+    
+    // Thread control
+    bool isThreadRunning() const { return displayThreadRunning; }
+    
+private:
+    // Hardware objects
+    ILI9341_T4::ILI9341Driver tft;
+    
+    // Framebuffers and diff buffers
+    uint16_t *fb;
+    uint16_t *fb_internal;
+    ILI9341_T4::DiffBuffStatic<4096> diff1;
+    ILI9341_T4::DiffBuffStatic<4096> diff2;
+    
+    // GFX wrapper
+    FramebufferGFX gfx;
+    
+    // Threading
+    volatile bool displayThreadRunning;
+    int displayThreadId;
+    volatile bool redrawRequested;
+    
+    // Draw callbacks
+    std::vector<DrawCallback> drawCallbacks;
+    
+    // Thread function (static to work with TeensyThreads)
+    static void displayUpdateThreadStatic();
+    void displayUpdateThread();
+    
+    // Singleton instance for static thread function
+    static DisplayManager* instance;
+};
+
+#endif

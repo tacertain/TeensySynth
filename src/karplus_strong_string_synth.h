@@ -3,26 +3,18 @@
 #include <Arduino.h>
 #include <AudioStream.h>
 #include <utility/dspinst.h>
-#include <ILI9341_t3.h>
-#include <font_Arial.h>
+#include <ILI9341_t4.h>
 #include <SPI.h>
+#include "FrameBufferGFX.h"
 
 #define NUM_SAMPLES 512
-
-// TFT Display pins (from main.cpp comments)
-#define TFT_CS   10
-#define TFT_DC   9
-// MOSI (11), SCK (13), MISO (12) are handled by SPI library
 
 class KarplusStrongStringSynth : public AudioStream
 {
 public:
-	KarplusStrongStringSynth(ILI9341_t3* display = nullptr) : AudioStream(0, NULL), tft(display)
+	KarplusStrongStringSynth() : AudioStream(0, NULL)
 	{
 		state = 0;
-		if (tft) {
-			tftInitialized = true;
-		}
 	}
 	int noteOn(float freq, float velocity)
 	{
@@ -70,7 +62,7 @@ public:
 		Serial.println();
 	}
 	virtual void update(void);
-	void setTFTDisplay(ILI9341_t3* display);
+	void setTFTDisplay(FramebufferGFX* display);
     void updateLoop();
     void updateFrequency(float newFreq)
     {
@@ -83,7 +75,7 @@ public:
 	volatile int displayBufferIndex = 0;
 	int displayThreadId = -1;
 	bool tftInitialized = false;
-	ILI9341_t3* tft;
+	FramebufferGFX* gfx;
 	uint8_t state; // 0=off, 1=begin on next update, 2=playing
 	
 	// Public access for display drawing
@@ -120,6 +112,6 @@ private:
 void displayUpdateThread(KarplusStrongStringSynth* synthInstance);
 
 // Non-instance function for drawing buffer graph
-void drawBufferGraph(ILI9341_t3* tft, int16_t* buffer, uint16_t bufferLen, float frequency, int32_t bufferGeneration, int bufferIndex);
+void drawBufferGraph(FramebufferGFX* gfx, int16_t* buffer, uint16_t bufferLen, float frequency, int32_t bufferGeneration);
 
 #endif
