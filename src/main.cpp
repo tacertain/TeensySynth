@@ -164,6 +164,30 @@ void OnRawPress(uint8_t keycode)
 {
     Serial.print("raw key press: ");
     Serial.println((int)keycode);
+    
+    // Mode switching using function keys
+    switch (keycode) {
+        case 58: // F1 - Strings only
+            synth.setSynthMode(HybridSynthesizer::STRINGS_ONLY);
+            Serial.println("Mode: STRINGS_ONLY");
+            break;
+        case 59: // F2 - Soundfont only
+            synth.setSynthMode(HybridSynthesizer::SOUNDFONT_ONLY);
+            Serial.println("Mode: SOUNDFONT_ONLY");
+            break;
+        case 60: // F3 - Layered
+            synth.setSynthMode(HybridSynthesizer::LAYERED);
+            Serial.println("Mode: LAYERED");
+            break;
+        case 61: // F4 - Split
+            synth.setSynthMode(HybridSynthesizer::SPLIT);
+            Serial.println("Mode: SPLIT");
+            break;
+        case 62: // F5 - Drone
+            synth.setSynthMode(HybridSynthesizer::DRONE);
+            Serial.println("Mode: DRONE");
+            break;
+    }
 }
 
 void OnRawRelease(uint8_t keycode)
@@ -227,59 +251,61 @@ void OnControlChange(byte channel, byte control, byte value)
         synth.setMasterVolume((float)value / 127.0f); // Updated method name
     }
 
-    // New controls for hybrid synthesizer
-    if (channel == 1 && control == 23)
+    // Drone-specific controls
+    if (channel == 1 && control == 23) // CC 23 - Drone Volume
     {
-        synth.setStringVolume((float)value / 127.0f);
+        synth.setDroneVolume((float)value / 127.0f);
+        Serial.printf("Drone volume: %.2f\n", (float)value / 127.0f);
+    }
+    
+    if (channel == 1 && control == 24) // CC 24 - Filter Cutoff
+    {
+        synth.getDrone().setFilterCutoff((float)value / 127.0f);
+        Serial.printf("Filter cutoff: %.2f\n", (float)value / 127.0f);
     }
 
-    if (channel == 1 && control == 24)
+    if (channel == 1 && control == 25) // CC 25 - LFO Rate
     {
-        synth.setSoundfontVolume((float)value / 127.0f);
+        float lfoRate = 0.1f + ((float)value / 127.0f) * 9.9f; // 0.1 to 10 Hz
+        synth.getDrone().setLFORate(lfoRate);
+        Serial.printf("LFO rate: %.2f Hz\n", lfoRate);
     }
 
-    // Synthesis mode switching (CC 25)
-    if (channel == 1 && control == 25)
+    if (channel == 1 && control == 26) // CC 26 - Oscillator Detune
     {
-        if (value < 32)
-        {
-            synth.setSynthMode(HybridSynthesizer::STRINGS_ONLY);
-            Serial.println("Switched to Strings Only mode");
-        }
-        else if (value < 64)
-        {
-            synth.setSynthMode(HybridSynthesizer::SOUNDFONT_ONLY);
-            Serial.println("Switched to Soundfont Only mode");
-        }
-        else if (value < 96)
-        {
-            synth.setSynthMode(HybridSynthesizer::LAYERED);
-            Serial.println("Switched to Layered mode");
-        }
-        else
-        {
-            synth.setSynthMode(HybridSynthesizer::SPLIT);
-            Serial.println("Switched to Split mode");
-        }
+        float detune = ((float)value / 127.0f - 0.5f) * 2.0f; // -1.0 to +1.0
+        synth.getDrone().setOscillatorDetune(detune);
+        Serial.printf("Oscillator detune: %.3f semitones\n", detune);
     }
 
-    // Split point control (CC 26)
-    if (channel == 1 && control == 26)
+    if (channel == 1 && control == 51 && value == 127) // CC 51 - Strings Only
     {
-        uint8_t splitNote = 36 + (value * 48 / 127); // Map to C2-C6 range
-        synth.setSplitPoint(splitNote);
-        Serial.print("Split point set to note ");
-        Serial.println(splitNote);
+        synth.setSynthMode(HybridSynthesizer::STRINGS_ONLY);
+        Serial.println("Mode: STRINGS_ONLY (CC 51)");
     }
-
-    if (channel == 1 && control == 51 && value == 127)
+    
+    if (channel == 1 && control == 52 && value == 127) // CC 52 - Soundfont Only
     {
-        Serial.print("Max CPU Usage = ");
-        Serial.print(AudioProcessorUsageMax(), 1);
-        Serial.print("% Max memory usage = ");
-        Serial.print(AudioMemoryUsageMax(), 1);
-        Serial.print("%");
-        Serial.println();
+        synth.setSynthMode(HybridSynthesizer::SOUNDFONT_ONLY);
+        Serial.println("Mode: SOUNDFONT_ONLY (CC 52)");
+    }
+    
+    if (channel == 1 && control == 53 && value == 127) // CC 53 - Layered
+    {
+        synth.setSynthMode(HybridSynthesizer::LAYERED);
+        Serial.println("Mode: LAYERED (CC 53)");
+    }
+    
+    if (channel == 1 && control == 54 && value == 127) // CC 54 - Split
+    {
+        synth.setSynthMode(HybridSynthesizer::SPLIT);
+        Serial.println("Mode: SPLIT (CC 54)");
+    }
+    
+    if (channel == 1 && control == 55 && value == 127) // CC 55 - Drone
+    {
+        synth.setSynthMode(HybridSynthesizer::DRONE);
+        Serial.println("Mode: DRONE (CC 55)");
     }
 }
 

@@ -4,6 +4,7 @@
 #include <map>
 #include "karplus_strong_string_synth.h"
 #include "SoundfontPlayer.h"
+#include "DroneSynthesizer.h"
 
 class HybridSynthesizer {
 public:
@@ -11,7 +12,8 @@ public:
         STRINGS_ONLY,
         SOUNDFONT_ONLY,
         LAYERED,      // Both playing together
-        SPLIT         // Keyboard split (low=strings, high=soundfont)
+        SPLIT,        // Keyboard split (low=strings, high=soundfont)
+        DRONE         // Analog-style drone synthesizer
     };
 
 private:
@@ -21,9 +23,13 @@ private:
     // Soundfont player
     SoundfontPlayer soundfont;
     
+    // Drone synthesizer
+    DroneSynthesizer drone;
+    
     // Audio mixing and output
     AudioMixer4 mixerL1, mixerL2, mixerL3;  // Added mixerL3 for soundfont
     AudioMixer4 mixerR1, mixerR2, mixerR3;  // Added mixerR3 for soundfont
+    AudioMixer4 mixerL4, mixerR4;           // Added mixerL4/R4 for drone
     AudioMixer4 sumL, sumR;
     AudioOutputI2S i2s1;
     
@@ -31,8 +37,10 @@ private:
     AudioConnection* stringPatchCords[16]; // 8 for L, 8 for R (strings)
     AudioConnection* soundfontPatchCordL;  // Soundfont to mixer
     AudioConnection* soundfontPatchCordR;  // Soundfont to mixer
-    AudioConnection* patchCordSumL1, *patchCordSumL2, *patchCordSumL3;
-    AudioConnection* patchCordSumR1, *patchCordSumR2, *patchCordSumR3;
+    AudioConnection* dronePatchCordL;      // Drone to mixer
+    AudioConnection* dronePatchCordR;      // Drone to mixer
+    AudioConnection* patchCordSumL1, *patchCordSumL2, *patchCordSumL3, *patchCordSumL4;
+    AudioConnection* patchCordSumR1, *patchCordSumR2, *patchCordSumR3, *patchCordSumR4;
     AudioConnection* patchCordL;
     AudioConnection* patchCordR;
 
@@ -42,6 +50,7 @@ private:
     float masterVolume = 1.0f;
     float stringVolume = 1.0f;
     float soundfontVolume = 1.0f;
+    float droneVolume = 1.0f;
     
     SynthMode currentMode = STRINGS_ONLY;
     uint8_t splitPoint = 60; // Middle C
@@ -50,8 +59,10 @@ public:
     HybridSynthesizer() :
         soundfontPatchCordL(nullptr),
         soundfontPatchCordR(nullptr),
-        patchCordSumL1(nullptr), patchCordSumL2(nullptr), patchCordSumL3(nullptr),
-        patchCordSumR1(nullptr), patchCordSumR2(nullptr), patchCordSumR3(nullptr),
+        dronePatchCordL(nullptr),
+        dronePatchCordR(nullptr),
+        patchCordSumL1(nullptr), patchCordSumL2(nullptr), patchCordSumL3(nullptr), patchCordSumL4(nullptr),
+        patchCordSumR1(nullptr), patchCordSumR2(nullptr), patchCordSumR3(nullptr), patchCordSumR4(nullptr),
         patchCordL(nullptr),
         patchCordR(nullptr)
     {
@@ -71,14 +82,20 @@ public:
         soundfontPatchCordL = new AudioConnection(soundfont, 0, mixerL3, 0);
         soundfontPatchCordR = new AudioConnection(soundfont, 0, mixerR3, 0);
         
+        // Connect drone to mixerL4 and mixerR4
+        dronePatchCordL = new AudioConnection(*drone.getLeftOutput(), 0, mixerL4, 0);
+        dronePatchCordR = new AudioConnection(*drone.getRightOutput(), 0, mixerR4, 0);
+        
         // Sum all mixers
         patchCordSumL1 = new AudioConnection(mixerL1, 0, sumL, 0);
         patchCordSumL2 = new AudioConnection(mixerL2, 0, sumL, 1);
         patchCordSumL3 = new AudioConnection(mixerL3, 0, sumL, 2);
+        patchCordSumL4 = new AudioConnection(mixerL4, 0, sumL, 3);
         
         patchCordSumR1 = new AudioConnection(mixerR1, 0, sumR, 0);
         patchCordSumR2 = new AudioConnection(mixerR2, 0, sumR, 1);
         patchCordSumR3 = new AudioConnection(mixerR3, 0, sumR, 2);
+        patchCordSumR4 = new AudioConnection(mixerR4, 0, sumR, 3);
         
         // Set initial mixer gains
         updateMixerGains();
@@ -92,12 +109,16 @@ public:
         for (int i = 0; i < 16; ++i) delete stringPatchCords[i];
         delete soundfontPatchCordL;
         delete soundfontPatchCordR;
+        delete dronePatchCordL;
+        delete dronePatchCordR;
         delete patchCordSumL1;
         delete patchCordSumL2;
         delete patchCordSumL3;
+        delete patchCordSumL4;
         delete patchCordSumR1;
         delete patchCordSumR2;
         delete patchCordSumR3;
+        delete patchCordSumR4;
         delete patchCordL;
         delete patchCordR;
     }
@@ -130,10 +151,19 @@ public:
         soundfontVolume = volume;
         updateMixerGains();
     }
+    
+    void setDroneVolume(float volume) {
+        droneVolume = volume;
+        updateMixerGains();
+    }
+    
+    // Drone-specific controls
+    DroneSynthesizer& getDrone() { return drone; }
 
     void noteOn(int key, float freq, float velocity) {
         bool playStrings = false;
         bool playSoundfont = false;
+        bool playDrone = false;
         
         switch (currentMode) {
             case STRINGS_ONLY:
@@ -153,6 +183,9 @@ public:
                     playSoundfont = true;
                 }
                 break;
+            case DRONE:
+                playDrone = true;
+                break;
         }
         
         if (playStrings) {
@@ -161,6 +194,10 @@ public:
         
         if (playSoundfont) {
             soundfont.noteOn(0, key, (uint8_t)(velocity * 127.0f));
+        }
+        
+        if (playDrone) {
+            drone.noteOn(freq, velocity);
         }
     }
 
@@ -175,6 +212,11 @@ public:
         }
         
         soundfont.noteOff(0, key);
+        
+        // For drone mode, we use monophonic behavior (single voice)
+        if (currentMode == DRONE) {
+            drone.noteOff();
+        }
     }
 
     void setPitchBend(float bendAmount) {
@@ -238,23 +280,33 @@ private:
     void updateMixerGains() {
         float stringGain = 0.0f;
         float soundfontGain = 0.0f;
+        float droneGain = 0.0f;
         
         switch (currentMode) {
             case STRINGS_ONLY:
                 stringGain = masterVolume * stringVolume;
                 soundfontGain = 0.0f;
+                droneGain = 0.0f;
                 break;
             case SOUNDFONT_ONLY:
                 stringGain = 0.0f;
                 soundfontGain = masterVolume * soundfontVolume;
+                droneGain = 0.0f;
                 break;
             case LAYERED:
                 stringGain = masterVolume * stringVolume * 0.7f; // Reduce to avoid clipping
                 soundfontGain = masterVolume * soundfontVolume * 0.7f;
+                droneGain = 0.0f;
                 break;
             case SPLIT:
                 stringGain = masterVolume * stringVolume;
                 soundfontGain = masterVolume * soundfontVolume;
+                droneGain = 0.0f;
+                break;
+            case DRONE:
+                stringGain = 0.0f;
+                soundfontGain = 0.0f;
+                droneGain = masterVolume * droneVolume;
                 break;
         }
         
@@ -270,14 +322,20 @@ private:
         mixerL3.gain(0, soundfontGain);
         mixerR3.gain(0, soundfontGain);
         
+        // Apply drone gains
+        mixerL4.gain(0, droneGain);
+        mixerR4.gain(0, droneGain);
+        
         // Sum mixer gains
         sumL.gain(0, 1.0f); // mixerL1
         sumL.gain(1, 1.0f); // mixerL2
         sumL.gain(2, 1.0f); // mixerL3
+        sumL.gain(3, 1.0f); // mixerL4
         
         sumR.gain(0, 1.0f); // mixerR1
         sumR.gain(1, 1.0f); // mixerR2
         sumR.gain(2, 1.0f); // mixerR3
+        sumR.gain(3, 1.0f); // mixerR4
         
         soundfont.setVolume(soundfontGain);
     }
