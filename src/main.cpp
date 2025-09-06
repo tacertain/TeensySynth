@@ -14,7 +14,11 @@
  * TFT Display:
  * CS: 10
  * DC: 9
- * SDI/MOSI: 11
+     if (channel == 1 && control == 55 && value == 127) // CC 55 - String Pads
+    {
+        synth.setSynthMode(HybridSynthesizer::STRING_PADS);
+        Serial.println("Mode: STRING_PADS (CC 55)");
+    }/MOSI: 11
  * SCK: 13
  * SDO/MISO: 12
  *
@@ -41,13 +45,9 @@ ILI9341_T4::ILI9341Driver tft(TFT_CS, TFT_DC, TFT_SCK, TFT_MOSI, TFT_MISO, TFT_R
 HybridSynthesizer synth; // Use the new hybrid synthesizer
 
 USBHost myusb;
-KeyboardController keyboard1(myusb);
 MIDIDevice midi1(myusb);
 
 // Function prototypes
-void OnPress(int key);
-void OnRawPress(uint8_t keycode);
-void OnRawRelease(uint8_t keycode);
 void OnNoteOn(byte channel, byte note, byte velocity);
 void OnNoteOff(byte channel, byte note, byte velocity);
 void OnControlChange(byte channel, byte control, byte value);
@@ -65,9 +65,6 @@ void setup()
 {
     // while (!Serial);
     myusb.begin();
-    keyboard1.attachPress(OnPress);
-    keyboard1.attachRawPress(OnRawPress);
-    keyboard1.attachRawRelease(OnRawRelease);
     midi1.setHandleNoteOff(OnNoteOff);
     midi1.setHandleNoteOn(OnNoteOn);
     midi1.setHandleControlChange(OnControlChange);
@@ -128,51 +125,6 @@ void loop()
         Serial.printf("Frame update took %dus\n", last - now);
         gfx.clearUpdate();
     }
-}
-
-void OnPress(int key)
-{
-    Serial.print("key '");
-    Serial.print((char)key);
-    Serial.print("'  ");
-    Serial.println(key);
-    // Serial.print("key ");
-    // Serial.print((char)keyboard1.getKey());
-    // Serial.print("  ");
-    // Serial.print((char)keyboard2.getKey());
-    // Serial.println();
-}
-
-void OnRawPress(uint8_t keycode)
-{
-    Serial.print("raw key press: ");
-    Serial.println((int)keycode);
-    
-    // Mode switching using function keys
-    switch (keycode) {
-        case 58: // F1 - Strings only
-            synth.setSynthMode(HybridSynthesizer::STRINGS_ONLY);
-            Serial.println("Mode: STRINGS_ONLY");
-            break;
-        case 60: // F3 - Layered
-            synth.setSynthMode(HybridSynthesizer::LAYERED);
-            Serial.println("Mode: LAYERED");
-            break;
-        case 61: // F4 - Split
-            synth.setSynthMode(HybridSynthesizer::SPLIT);
-            Serial.println("Mode: SPLIT");
-            break;
-        case 62: // F5 - Drone
-            synth.setSynthMode(HybridSynthesizer::DRONE);
-            Serial.println("Mode: DRONE");
-            break;
-    }
-}
-
-void OnRawRelease(uint8_t keycode)
-{
-    Serial.print("raw key release: ");
-    Serial.println((int)keycode);
 }
 
 void OnNoteOn(byte channel, byte note, byte velocity)
@@ -263,28 +215,47 @@ void OnControlChange(byte channel, byte control, byte value)
         Serial.printf("LFO depth: %.2f\n", (float)value / 127.0f);
     }
 
-    if (channel == 1 && control == 51 && value == 127) // CC 51 - Strings Only
+    // String pad-specific controls
+    if (channel == 1 && control == 41) // CC 41 - String Pad Volume
     {
-        synth.setSynthMode(HybridSynthesizer::STRINGS_ONLY);
-        Serial.println("Mode: STRINGS_ONLY (CC 51)");
+        synth.setStringPadVolume((float)value / 127.0f);
+        Serial.printf("String pad volume: %.2f\n", (float)value / 127.0f);
     }
     
-    if (channel == 1 && control == 53 && value == 127) // CC 53 - Layered
+    if (channel == 1 && control == 42) // CC 42 - String Pad Filter Cutoff
     {
-        synth.setSynthMode(HybridSynthesizer::LAYERED);
-        Serial.println("Mode: LAYERED (CC 53)");
+        synth.getStringPad().setFilterCutoff((float)value / 127.0f);
+        Serial.printf("String pad filter cutoff: %.2f\n", (float)value / 127.0f);
     }
     
-    if (channel == 1 && control == 54 && value == 127) // CC 54 - Split
+    if (channel == 1 && control == 43) // CC 43 - String Pad Filter Resonance
     {
-        synth.setSynthMode(HybridSynthesizer::SPLIT);
-        Serial.println("Mode: SPLIT (CC 54)");
+        synth.getStringPad().setFilterResonance((float)value / 127.0f);
+        Serial.printf("String pad filter resonance: %.2f\n", (float)value / 127.0f);
     }
     
-    if (channel == 1 && control == 55 && value == 127) // CC 55 - Drone
+    if (channel == 1 && control == 44) // CC 44 - String Pad Detune Amount
+    {
+        synth.getStringPad().setDetuneAmount((float)value / 127.0f);
+        Serial.printf("String pad detune amount: %.2f\n", (float)value / 127.0f);
+    }
+
+    if (channel == 1 && control == 51 && value == 127) // CC 51 - Plucked Strings
+    {
+        synth.setSynthMode(HybridSynthesizer::PLUCKED_STRINGS);
+        Serial.println("Mode: PLUCKED_STRINGS (CC 51)");
+    }
+    
+    if (channel == 1 && control == 54 && value == 127) // CC 54 - Drone
     {
         synth.setSynthMode(HybridSynthesizer::DRONE);
-        Serial.println("Mode: DRONE (CC 55)");
+        Serial.println("Mode: DRONE (CC 54)");
+    }
+    
+    if (channel == 1 && control == 55 && value == 127) // CC 55 - String Pads
+    {
+        synth.setSynthMode(HybridSynthesizer::STRING_PADS);
+        Serial.println("Mode: STRING_PADS (CC 47)");
     }
 }
 

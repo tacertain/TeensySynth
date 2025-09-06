@@ -4,14 +4,14 @@
 #include <map>
 #include "karplus_strong_string_synth.h"
 #include "DroneSynthesizer.h"
+#include "StringPadSynthesizer.h"
 
 class HybridSynthesizer {
 public:
     enum SynthMode {
-        STRINGS_ONLY,
-        LAYERED,      // Strings + Drone
-        SPLIT,        // Keyboard split (low=strings, high=drone)
-        DRONE         // Analog-style drone synthesizer
+        PLUCKED_STRINGS,    // Karplus-Strong plucked strings (renamed from STRINGS_ONLY)
+        DRONE,              // Analog-style drone synthesizer  
+        STRING_PADS         // Classic 80s string pads
     };
 
 private:
@@ -21,10 +21,14 @@ private:
     // Drone synthesizer
     DroneSynthesizer drone;
     
+    // String pad synthesizer
+    StringPadSynthesizer stringPad;
+    
     // Audio mixing and output
     AudioMixer4 mixerL1, mixerL2;  // String mixers
     AudioMixer4 mixerR1, mixerR2;  // String mixers
     AudioMixer4 mixerL4, mixerR4;  // Drone mixers
+    AudioMixer4 mixerL5, mixerR5;  // String pad mixers
     AudioMixer4 sumL, sumR;
     AudioOutputI2S i2s1;
     
@@ -32,8 +36,10 @@ private:
     AudioConnection* stringPatchCords[16]; // 8 for L, 8 for R (strings)
     AudioConnection* dronePatchCordL;      // Drone to mixer
     AudioConnection* dronePatchCordR;      // Drone to mixer
-    AudioConnection* patchCordSumL1, *patchCordSumL2, *patchCordSumL4;
-    AudioConnection* patchCordSumR1, *patchCordSumR2, *patchCordSumR4;
+    AudioConnection* stringPadPatchCordL;  // String pad to mixer
+    AudioConnection* stringPadPatchCordR;  // String pad to mixer
+    AudioConnection* patchCordSumL1, *patchCordSumL2, *patchCordSumL4, *patchCordSumL5;
+    AudioConnection* patchCordSumR1, *patchCordSumR2, *patchCordSumR4, *patchCordSumR5;
     AudioConnection* patchCordL;
     AudioConnection* patchCordR;
 
@@ -43,16 +49,19 @@ private:
     float masterVolume = 1.0f;
     float stringVolume = 1.0f;
     float droneVolume = 1.0f;
+    float stringPadVolume = 1.0f;
     
-    SynthMode currentMode = STRINGS_ONLY;
+    SynthMode currentMode = PLUCKED_STRINGS;  // Updated default mode
     uint8_t splitPoint = 60; // Middle C
 
 public:
     HybridSynthesizer() :
         dronePatchCordL(nullptr),
         dronePatchCordR(nullptr),
-        patchCordSumL1(nullptr), patchCordSumL2(nullptr), patchCordSumL4(nullptr),
-        patchCordSumR1(nullptr), patchCordSumR2(nullptr), patchCordSumR4(nullptr),
+        stringPadPatchCordL(nullptr),
+        stringPadPatchCordR(nullptr),
+        patchCordSumL1(nullptr), patchCordSumL2(nullptr), patchCordSumL4(nullptr), patchCordSumL5(nullptr),
+        patchCordSumR1(nullptr), patchCordSumR2(nullptr), patchCordSumR4(nullptr), patchCordSumR5(nullptr),
         patchCordL(nullptr),
         patchCordR(nullptr)
     {
@@ -72,14 +81,20 @@ public:
         dronePatchCordL = new AudioConnection(*drone.getLeftOutput(), 0, mixerL4, 0);
         dronePatchCordR = new AudioConnection(*drone.getRightOutput(), 0, mixerR4, 0);
         
+        // Connect string pad to mixerL5 and mixerR5 (mono to both channels)
+        stringPadPatchCordL = new AudioConnection(*stringPad.getOutput(), 0, mixerL5, 0);
+        stringPadPatchCordR = new AudioConnection(*stringPad.getOutput(), 0, mixerR5, 0);
+        
         // Sum all mixers
         patchCordSumL1 = new AudioConnection(mixerL1, 0, sumL, 0);
         patchCordSumL2 = new AudioConnection(mixerL2, 0, sumL, 1);
         patchCordSumL4 = new AudioConnection(mixerL4, 0, sumL, 2);
+        patchCordSumL5 = new AudioConnection(mixerL5, 0, sumL, 3);
         
         patchCordSumR1 = new AudioConnection(mixerR1, 0, sumR, 0);
         patchCordSumR2 = new AudioConnection(mixerR2, 0, sumR, 1);
         patchCordSumR4 = new AudioConnection(mixerR4, 0, sumR, 2);
+        patchCordSumR5 = new AudioConnection(mixerR5, 0, sumR, 3);
         
         // Set initial mixer gains
         updateMixerGains();
@@ -93,12 +108,16 @@ public:
         for (int i = 0; i < 16; ++i) delete stringPatchCords[i];
         delete dronePatchCordL;
         delete dronePatchCordR;
+        delete stringPadPatchCordL;
+        delete stringPadPatchCordR;
         delete patchCordSumL1;
         delete patchCordSumL2;
         delete patchCordSumL4;
+        delete patchCordSumL5;
         delete patchCordSumR1;
         delete patchCordSumR2;
         delete patchCordSumR4;
+        delete patchCordSumR5;
         delete patchCordL;
         delete patchCordR;
     }
@@ -127,61 +146,58 @@ public:
         updateMixerGains();
     }
     
-    // Drone-specific controls
+    void setStringPadVolume(float volume) {
+        stringPadVolume = volume;
+        updateMixerGains();
+    }
+    
+    // Synthesizer access
     DroneSynthesizer& getDrone() { return drone; }
+    StringPadSynthesizer& getStringPad() { return stringPad; }
 
     // Processing - call this regularly from main loop
     void update() {
         drone.processEnvelopes();
+        stringPad.processEnvelope();
     }
 
-    void noteOn(int key, float freq, float velocity) {
-        bool playStrings = false;
-        bool playDrone = false;
-        
+    void noteOn(int key, float freq, float velocity) {        
         switch (currentMode) {
-            case STRINGS_ONLY:
-                playStrings = true;
-                break;
-            case LAYERED:
-                playStrings = true;
-                playDrone = true;
-                break;
-            case SPLIT:
-                if (key < splitPoint) {
-                    playStrings = true;
-                } else {
-                    playDrone = true;
-                }
+            case PLUCKED_STRINGS:
+                playStringNote(key, freq, velocity);
                 break;
             case DRONE:
-                playDrone = true;
+                // Convert key to MIDI note and use polyphonic interface
+                drone.noteOn(key, velocity);
                 break;
-        }
-        
-        if (playStrings) {
-            playStringNote(key, freq, velocity);
-        }
-        
-        if (playDrone) {
-            // Convert key to MIDI note and use new polyphonic interface
-            drone.noteOn(key, velocity);
+            case STRING_PADS:
+                // Use single voice for Phase 1
+                stringPad.noteOn(key, velocity);
+                break;
         }
     }
 
     void noteOff(int key) {
-        // Always try to stop strings - they'll ignore if not playing
-        auto it = keyToString.find(key);
-        if (it != keyToString.end()) {
-            int stringIndex = it->second;
-            strings[stringIndex].noteOff();
-            keyToString.erase(it);
-            keyToBaseFreq.erase(key);
-        }
-        
-        // For drone mode, handle polyphonic note off
-        if (currentMode == DRONE || currentMode == LAYERED || currentMode == SPLIT) {
-            drone.noteOff(key);
+        switch (currentMode) {
+            case PLUCKED_STRINGS:
+                // Stop string if it's playing this key
+                {
+                    auto it = keyToString.find(key);
+                    if (it != keyToString.end()) {
+                        int stringIndex = it->second;
+                        strings[stringIndex].noteOff();
+                        keyToString.erase(it);
+                        keyToBaseFreq.erase(key);
+                    }
+                }
+                break;
+            case DRONE:
+                drone.noteOff(key);
+                break;
+            case STRING_PADS:
+                // Single voice - just stop it
+                stringPad.noteOff();
+                break;
         }
     }
 
@@ -242,23 +258,23 @@ private:
     void updateMixerGains() {
         float stringGain = 0.0f;
         float droneGain = 0.0f;
+        float stringPadGain = 0.0f;
         
         switch (currentMode) {
-            case STRINGS_ONLY:
+            case PLUCKED_STRINGS:
                 stringGain = masterVolume * stringVolume;
                 droneGain = 0.0f;
-                break;
-            case LAYERED:
-                stringGain = masterVolume * stringVolume * 0.7f; // Reduce to avoid clipping
-                droneGain = masterVolume * droneVolume * 0.7f;
-                break;
-            case SPLIT:
-                stringGain = masterVolume * stringVolume;
-                droneGain = masterVolume * droneVolume;
+                stringPadGain = 0.0f;
                 break;
             case DRONE:
                 stringGain = 0.0f;
                 droneGain = masterVolume * droneVolume;
+                stringPadGain = 0.0f;
+                break;
+            case STRING_PADS:
+                stringGain = 0.0f;
+                droneGain = 0.0f;
+                stringPadGain = masterVolume * stringPadVolume;
                 break;
         }
         
@@ -274,13 +290,19 @@ private:
         mixerL4.gain(0, droneGain);
         mixerR4.gain(0, droneGain);
         
+        // Apply string pad gains
+        mixerL5.gain(0, stringPadGain);
+        mixerR5.gain(0, stringPadGain);
+        
         // Sum mixer gains
         sumL.gain(0, 1.0f); // mixerL1
         sumL.gain(1, 1.0f); // mixerL2
         sumL.gain(2, 1.0f); // mixerL4
+        sumL.gain(3, 1.0f); // mixerL5
         
         sumR.gain(0, 1.0f); // mixerR1
         sumR.gain(1, 1.0f); // mixerR2
         sumR.gain(2, 1.0f); // mixerR4
+        sumR.gain(3, 1.0f); // mixerR5
     }
 };

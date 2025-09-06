@@ -1,49 +1,35 @@
-# TeensySynth Keyboard Controls for Musicians
+# TeensySynth MIDI Controls for Musicians
 
 ## Overview
-The TeensySynth is a polyphonic hybrid synthesizer running on a Teensy 4.1 microcontroller. It combines Karplus-Strong string synthesis with an analog-style drone synthesizer, giving you access to both plucked string sounds and classic 1980s analog pad sounds.
+The TeensySynth is a polyphonic hybrid synthesizer running on a Teensy 4.1 microcontroller. It combines three distinct synthesis methods: Karplus-Strong plucked strings, analog-style drone synthesis, and classic 80s string pads.
 
 ## Synthesis Modes
-The synthesizer has four main modes that can be switched between:
+The synthesizer has three main modes:
 
-### 1. **STRINGS_ONLY** Mode
-- Only the Karplus-Strong string synthesizer is active
-- 8-voice polyphony with realistic string pluck sounds
-- Each note triggers a physical string simulation
+### 1. **PLUCKED_STRINGS** Mode
+- Karplus-Strong string synthesizer for realistic plucked string sounds
+- 8-voice polyphony with physical string simulation
+- Each note triggers a string pluck with natural decay
 
 ### 2. **DRONE** Mode  
-- Only the analog-style drone synthesizer is active
+- Analog-style polyphonic drone synthesizer
 - 6-voice polyphony with rich analog pad sounds
 - Designed to recreate classic Korg MS-10 sounds like those in "I Ran" by Flock of Seagulls
 
-### 3. **LAYERED** Mode
-- Both string and drone synthesizers play simultaneously
-- Creates rich, layered textures combining plucked strings with analog pads
-- Full polyphony for both engines
-
-### 4. **SPLIT** Mode
-- Keyboard split at Middle C (C4/Note 60)
-- **Lower keys (below C4)**: String synthesizer
-- **Upper keys (C4 and above)**: Drone synthesizer
-- Perfect for bass strings with lead drone sounds
+### 3. **STRING_PADS** Mode
+- Classic 80s string synthesizer with ensemble chorus effect
+- Single voice (Phase 1 implementation)
+- Warm, sustained string pad sounds with 3-layer ensemble detuning
 
 ## Control Methods
-
-### Keyboard Function Keys (USB Keyboard)
-Connect a USB keyboard to switch between modes:
-- **F1**: Strings Only mode
-- **F3**: Layered mode (strings + drone)
-- **F4**: Split mode
-- **F5**: Drone mode
 
 ### MIDI Control Change Messages (CC)
 Connect a MIDI controller or DAW for real-time parameter control:
 
 #### Mode Switching (Channel 1)
-- **CC 51** (value 127): Switch to Strings Only
-- **CC 53** (value 127): Switch to Layered mode  
-- **CC 54** (value 127): Switch to Split mode
-- **CC 55** (value 127): Switch to Drone mode
+- **CC 51** (value 127): Switch to Plucked Strings
+- **CC 54** (value 127): Switch to Drone mode
+- **CC 55** (value 127): Switch to String Pads mode
 
 #### Volume Controls (Channel 1)
 - **CC 7**: Master Volume (0-127) - Controls overall output level
@@ -54,13 +40,19 @@ Connect a MIDI controller or DAW for real-time parameter control:
 - **CC 22**: String Filter Strength (0-127) - Controls string filtering
 
 #### Drone Synthesizer Controls (Channel 1)
-- **CC 24**: Filter Cutoff (0-127) - ✅ **ACTIVE** - Primary expressive control for analog sound with per-voice filtering
-- **CC 25**: LFO Rate (0-127) - ✅ **ACTIVE** - Speed of automatic filter sweep (0.1-10 Hz) for breathing/pulsing effects
+- **CC 24**: Filter Cutoff (0-127) - Primary expressive control for analog sound with per-voice filtering
+- **CC 25**: LFO Rate (0-127) - Speed of automatic filter sweep (0.1-10 Hz) for breathing/pulsing effects
 - **CC 26**: Oscillator Detune (0-127) - Analog warmth control
   - Value 64 = no detune
   - Values 0-63 = negative detune
   - Values 65-127 = positive detune
-- **CC 27**: LFO Depth (0-127) - ✅ **NEW** - Amount of filter modulation (0 = no LFO effect, 127 = maximum sweep)
+- **CC 27**: LFO Depth (0-127) - Amount of filter modulation (0 = no LFO effect, 127 = maximum sweep)
+
+#### String Pad Synthesizer Controls (Channel 1)
+- **CC 41**: String Pad Volume (0-127) - Controls string pad synthesizer level
+- **CC 42**: String Pad Filter Cutoff (0-127) - Filter brightness (200-2000 Hz range)
+- **CC 43**: String Pad Filter Resonance (0-127) - Filter resonance amount
+- **CC 44**: String Pad Detune Amount (0-127) - Ensemble detuning (0-15 cents range)
 
 #### Global Controls (Channel 1)
 - **Pitch Bend**: Pitch bend wheel affects all active voices
@@ -150,11 +142,10 @@ The following features are planned for the next update:
 ## Connection Setup
 1. **Audio Output**: Connect headphones or speakers to Teensy audio output
 2. **MIDI Input**: Connect MIDI keyboard/controller to Teensy USB host port
-3. **USB Keyboard**: Connect standard USB keyboard for mode switching
-4. **Power**: Use quality USB power supply for stable operation
+3. **Power**: Use quality USB power supply for stable operation
 
 ## Troubleshooting
 - If no sound: Check audio connections and master volume (CC 7)
 - If MIDI not responding: Ensure MIDI device is on Channel 1
-- If mode switching not working: Try both function keys and MIDI CC controls
+- If mode switching not working: Use MIDI CC controls (51/54/55)
 - For best results: Use MIDI controller with knobs/sliders for real-time control
