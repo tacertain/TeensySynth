@@ -14,9 +14,9 @@ const StringPadSynthesizer::PresetData StringPadSynthesizer::presetData[PRESET_C
     },
     // PRESET_BRIGHT_STRINGS - Brighter, more aggressive strings
     {
-        .filterCutoff = 0.7f,       // Brighter sound
-        .filterResonance = 0.4f,    // More character
-        .detuneAmount = 0.5f,       // Moderate ensemble
+        .filterCutoff = 1.0f,       // Brighter sound
+        .filterResonance = 0.3f,    // More character
+        .detuneAmount = 0.68f,       // Moderate ensemble
         .masterVolume = 0.9f,       // Punchy volume
         .attackTime = 150.0f,       // Quicker attack
         .releaseTime = 600.0f       // Medium release
