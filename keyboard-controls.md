@@ -54,12 +54,13 @@ Connect a MIDI controller or DAW for real-time parameter control:
 - **CC 22**: String Filter Strength (0-127) - Controls string filtering
 
 #### Drone Synthesizer Controls (Channel 1)
-- **CC 24**: Filter Cutoff (0-127) - Primary expressive control for analog sound
-- **CC 25**: LFO Rate (0-127) - Speed of filter sweep (0.1-10 Hz)
+- **CC 24**: Filter Cutoff (0-127) - ✅ **ACTIVE** - Primary expressive control for analog sound with per-voice filtering
+- **CC 25**: LFO Rate (0-127) - ✅ **ACTIVE** - Speed of automatic filter sweep (0.1-10 Hz) for breathing/pulsing effects
 - **CC 26**: Oscillator Detune (0-127) - Analog warmth control
   - Value 64 = no detune
   - Values 0-63 = negative detune
   - Values 65-127 = positive detune
+- **CC 27**: LFO Depth (0-127) - ✅ **NEW** - Amount of filter modulation (0 = no LFO effect, 127 = maximum sweep)
 
 #### Global Controls (Channel 1)
 - **Pitch Bend**: Pitch bend wheel affects all active voices
@@ -82,19 +83,23 @@ Connect a MIDI controller or DAW for real-time parameter control:
 - **Sustain**: Natural string decay with controllable damping
 - **Timbre**: Warm, organic string sound
 
-### Drone Synthesizer (Current Phase 2 Implementation)
+### Drone Synthesizer (Phase 3 Implementation - Steps 1-2 Complete)
 - **Oscillators**: Dual sawtooth + pulse waves with sub-oscillator
 - **Polyphony**: 6-voice with intelligent voice allocation  
-- **Envelope**: Slow attack (200ms), high sustain (0.8), medium release (800ms)
-- **Sound**: Rich analog-style pads perfect for atmospheric sounds
+- **Filtering**: ✅ **NEW** - Individual lowpass filters per voice with cutoff and resonance control
+- **LFO Modulation**: ✅ **NEW** - Automatic filter cutoff modulation for breathing/sweeping effects
+- **Envelope**: Slow attack (200ms), high sustain (0.8), **fast release (50ms)** ✅ **UPDATED**
+- **Sound**: Rich analog-style pads with dynamic filter sweeps and responsive note releases
 - **Detuning**: Slight oscillator detuning for analog warmth
 
 ## Usage Tips for Musicians
 
 ### For Classic Rock/New Wave Sounds
 1. Use **DRONE** mode with **CC 24** (Filter Cutoff) mapped to a knob or slider
-2. Play sustained chords while sweeping the filter for that classic "I Ran" sound
-3. Use **CC 25** (LFO Rate) to add automatic filter movement
+2. Set **CC 27** (LFO Depth) to mid-range (64) for moderate automatic movement
+3. Adjust **CC 25** (LFO Rate) for desired breathing speed - try value 32 for slow, atmospheric sweeps
+4. Play sustained chords while sweeping **CC 24** for that classic "I Ran" sound
+5. Use **CC 27** set to 0 to disable LFO for static filter sounds, or 127 for maximum movement
 
 ### for String Ensemble Sounds
 1. Use **STRINGS_ONLY** mode for realistic string section
@@ -111,11 +116,11 @@ Connect a MIDI controller or DAW for real-time parameter control:
 2. The split point is fixed at Middle C (note 60)
 3. Great for solo performances with accompaniment
 
-## Planned Future Features (Phase 3)
+## Planned Future Features (Phase 3 - Steps 3-4)
 The following features are planned for the next update:
 
-- **Per-voice filtering** for more dynamic drone sounds
-- **LFO modulation** of filter cutoff for automatic sweeps
+- ✅ **Per-voice filtering** - COMPLETED: Each voice now has individual lowpass filtering
+- ✅ **LFO modulation** - COMPLETED: Automatic filter cutoff sweeps now active  
 - **Chorus and reverb effects** for wider, more spacious sounds  
 - **Enhanced ADSR envelopes** with full attack/decay/sustain/release control
 

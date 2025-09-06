@@ -59,6 +59,9 @@ private:
         // Voice mixing
         AudioMixer4 oscMixer;
         
+        // Filter per voice (Phase 3 Step 1)
+        AudioFilterStateVariable filter;    // Lowpass filter with cutoff and resonance
+        
         // Envelope simulation
         AudioAmplifier envAmp;
         
@@ -75,7 +78,8 @@ private:
         AudioConnection *patchCord1; // osc1 to mixer
         AudioConnection *patchCord2; // osc2 to mixer
         AudioConnection *patchCord3; // subOsc to mixer
-        AudioConnection *patchCord4; // mixer to envelope
+        AudioConnection *patchCord4; // mixer to filter
+        AudioConnection *patchCord5; // filter to envelope
 
         DroneVoice();
         ~DroneVoice();
@@ -84,12 +88,13 @@ private:
         void startNote(int note, float freq, float vel);
         void stopNote();
         void updateEnvelope();
+        void updateFilter(float cutoff, float resonance, float lfoValue);  // Phase 3 Step 2
     };
     
     // Voice array
     DroneVoice voices[MAX_VOICES];
     
-    // Global LFO (shared across all voices)
+    // Global LFO (shared across all voices) - Phase 3 Step 2
     AudioSynthWaveform globalLFO;
     
     // Voice mixing and output
@@ -134,4 +139,5 @@ private:
     // Internal methods
     void updateAllVoiceParameters();
     void updateGlobalLFO();
+    void updateAllVoiceFilters();  // Phase 3 Step 2 - Apply LFO modulation to all voices
 };

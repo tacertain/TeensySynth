@@ -257,6 +257,12 @@ void OnControlChange(byte channel, byte control, byte value)
         Serial.printf("Oscillator detune: %.3f semitones\n", detune);
     }
 
+    if (channel == 1 && control == 27) // CC 27 - LFO Depth
+    {
+        synth.getDrone().setLFODepth((float)value / 127.0f);
+        Serial.printf("LFO depth: %.2f\n", (float)value / 127.0f);
+    }
+
     if (channel == 1 && control == 51 && value == 127) // CC 51 - Strings Only
     {
         synth.setSynthMode(HybridSynthesizer::STRINGS_ONLY);

@@ -106,10 +106,10 @@ Create a new `DroneSynthesizer` class that utilizes Teensy Audio Library compone
 3. ✅ Integrate with existing MIDI note on/off system
 4. ✅ Update HybridSynthesizer to use MIDI note numbers instead of frequency
 
-#### Phase 3: Effects and Modulation (NEXT)
-1. **Add proper filter components (AudioFilterStateVariable)** - Each voice will gain individual lowpass filtering capability, allowing for per-voice filter cutoff control and the characteristic analog warmth through frequency shaping. This enables the signature "swoosh" effect when combined with modulation.
+#### Phase 3: Effects and Modulation (IN PROGRESS)
+1. ✅ **Add proper filter components (AudioFilterStateVariable)** - COMPLETED: Each voice now has individual lowpass filtering capability, allowing for per-voice filter cutoff control and the characteristic analog warmth through frequency shaping. This enables the signature "swoosh" effect when combined with modulation.
 
-2. **Implement LFO modulation system for filter sweeps** - Adds the classic analog movement and life to the drone sound. The LFO will automatically sweep the filter cutoff frequency, creating the iconic breathing/pulsing effect heard in classic 80s analog pads and the signature sound from "I Ran".
+2. ✅ **Implement LFO modulation system for filter sweeps** - COMPLETED: Added the classic analog movement and life to the drone sound. The LFO now automatically sweeps the filter cutoff frequency, creating the iconic breathing/pulsing effect heard in classic 80s analog pads and the signature sound from "I Ran".
 
 3. **Add chorus and reverb effects** - The chorus effect will create the wide, ensemble-like stereo image that makes the drone sound fuller and more spacious. Reverb will add ambient depth and the characteristic "floating" quality of classic analog pad sounds.
 
@@ -177,7 +177,7 @@ The drone mode will produce:
 - Two-tier mixer system handles 6 voices efficiently (4+2 voices per mixer level)
 - Voice allocation supports note-on/note-off tracking for proper polyphonic behavior
 - Global parameters (detune, LFO, etc.) affect all voices simultaneously
-- Envelope processing with release phase timing (800ms release in Phase 2)
+- Envelope processing with release phase timing (50ms fast release for responsive playing)
 
 ### Audio Memory Usage:
 - **Phase 1**: ~10 audio objects (single voice)
@@ -185,7 +185,32 @@ The drone mode will produce:
 - Memory efficient design using shared LFO and effects (Phase 3)
 
 ### Next Steps for Phase 3:
-- Add `AudioFilterStateVariable` per voice for proper filter sweeps
-- Implement LFO modulation of filter cutoff
+- ✅ Add `AudioFilterStateVariable` per voice for proper filter sweeps - COMPLETED
+- ✅ Implement LFO modulation of filter cutoff - COMPLETED  
 - Add chorus and reverb effects for ensemble sound
 - Enhanced ADSR envelopes with proper timing curves
+
+### Phase 3 Steps 1-2 Implementation Summary
+
+**Completed:** Individual voice filtering with LFO modulation system
+
+### Key Features Implemented:
+- **Per-Voice Filtering**: Each of the 6 voices now has an individual `AudioFilterStateVariable` lowpass filter
+- **Filter Parameter Control**: CC 24 (Filter Cutoff) and CC 25 (LFO Rate) now functional
+- **LFO Modulation System**: Global LFO automatically modulates all voice filter cutoffs for breathing effects
+- **LFO Depth Control**: ✅ **NEW** - CC 27 controls the amount of LFO modulation (0 = no LFO, 127 = maximum)
+- **Dynamic Filter Sweeps**: Filter frequency range 100Hz-8000Hz with variable LFO modulation depth
+- **Resonance Control**: Filter resonance mapped to reasonable Q values (0.7-5.0 range)
+- **Real-time Updates**: Filter parameters update smoothly every 10ms for responsive control
+
+### Technical Implementation:
+- Updated audio routing: Oscillators → Mixer → Filter → Envelope → Voice Mixers
+- Added `updateFilter()` method to each voice for individual filter control  
+- Implemented `updateAllVoiceFilters()` for global LFO modulation application
+- LFO phase calculation runs independently for smooth, continuous modulation
+- Filter cutoff calculation combines base frequency + LFO modulation with proper constraints
+
+### Audio Memory Impact:
+- **Phase 2**: ~70 audio objects (6 voices + mixing)
+- **Phase 3 Steps 1-2**: ~76 audio objects (added 6 filters, maintained efficiency)
+- Still within Teensy 4.1 memory budget with room for Phase 3 steps 3-4

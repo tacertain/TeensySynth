@@ -14,6 +14,7 @@ DroneSynthesizer::DroneVoice::DroneVoice()
     , patchCord2(nullptr)
     , patchCord3(nullptr)
     , patchCord4(nullptr)
+    , patchCord5(nullptr)
 {
 }
 
@@ -33,11 +34,17 @@ void DroneSynthesizer::DroneVoice::initialize() {
     oscMixer.gain(2, 0.2f);  // subOsc (square, lower level)
     oscMixer.gain(3, 0.0f);  // unused
     
-    // Create audio connections
+    // Initialize filter (Phase 3 Step 1)
+    filter.frequency(1000.0f);    // Default cutoff frequency
+    filter.resonance(0.7f);       // Default resonance
+    filter.octaveControl(7.0f);   // Full range control
+    
+    // Create audio connections (Phase 3 Step 1 - updated routing)
     patchCord1 = new AudioConnection(osc1, 0, oscMixer, 0);
     patchCord2 = new AudioConnection(osc2, 0, oscMixer, 1);
     patchCord3 = new AudioConnection(subOsc, 0, oscMixer, 2);
-    patchCord4 = new AudioConnection(oscMixer, 0, envAmp, 0);
+    patchCord4 = new AudioConnection(oscMixer, 0, filter, 0);      // mixer -> filter
+    patchCord5 = new AudioConnection(filter, 0, envAmp, 0);        // filter -> envelope
     
     // Initialize envelope amplifier
     envAmp.gain(0.0f);
@@ -48,7 +55,8 @@ void DroneSynthesizer::DroneVoice::cleanup() {
     delete patchCord2;
     delete patchCord3;
     delete patchCord4;
-    patchCord1 = patchCord2 = patchCord3 = patchCord4 = nullptr;
+    delete patchCord5;
+    patchCord1 = patchCord2 = patchCord3 = patchCord4 = patchCord5 = nullptr;
 }
 
 void DroneSynthesizer::DroneVoice::startNote(int note, float freq, float vel) {
@@ -79,6 +87,9 @@ void DroneSynthesizer::DroneVoice::stopNote() {
 void DroneSynthesizer::DroneVoice::updateEnvelope() {
     if (!active) return;
     
+    // Release time constant (in milliseconds)
+    static const unsigned long ENVELOPE_RELEASE_TIME_MS = 50;
+    
     if (releasing) {
         // Simple release - fade out over time
         if (noteOffTime == 0) {
@@ -87,16 +98,32 @@ void DroneSynthesizer::DroneVoice::updateEnvelope() {
         }
         
         unsigned long releaseTime = millis() - noteOffTime;
-        if (releaseTime > 800) { // 800ms release
+        if (releaseTime > ENVELOPE_RELEASE_TIME_MS) { // 50ms release
             envAmp.gain(0.0f);
             active = false;
             releasing = false;
             midiNote = -1;
         } else {
-            float releaseGain = (1.0f - (float)releaseTime / 800.0f) * velocity * 0.8f;
+            float releaseGain = (1.0f - (float)releaseTime / (float)ENVELOPE_RELEASE_TIME_MS) * velocity * 0.8f;
             envAmp.gain(releaseGain);
         }
     }
+}
+
+// Phase 3 Step 2: Update filter with LFO modulation
+void DroneSynthesizer::DroneVoice::updateFilter(float cutoff, float resonance, float lfoValue) {
+    if (!active) return;
+    
+    // Apply LFO modulation to filter cutoff
+    // cutoff: 0.0-1.0 base cutoff frequency
+    // lfoValue: -1.0 to +1.0 LFO output
+    // Map to reasonable filter frequency range (100Hz - 8000Hz)
+    float baseCutoff = 100.0f + (cutoff * 7900.0f);  // 100Hz to 8000Hz
+    float lfoModulation = lfoValue * cutoff * 2000.0f;  // LFO can add ±2000Hz when cutoff is at max
+    float finalCutoff = constrain(baseCutoff + lfoModulation, 100.0f, 8000.0f);
+    
+    filter.frequency(finalCutoff);
+    filter.resonance(0.7f + resonance * 4.3f);  // Map 0.0-1.0 to 0.7-5.0 (reasonable Q range)
 }
 
 // Main DroneSynthesizer implementation  
@@ -117,8 +144,9 @@ DroneSynthesizer::DroneSynthesizer()
         voices[i].initialize();
     }
     
-    // Set up global LFO
-    globalLFO.begin(1.0, lfoRate, 0); // sine wave
+    // Set up global LFO (Phase 3 Step 2)
+    globalLFO.begin(1.0, lfoRate, 0); // sine wave for smooth modulation
+    updateGlobalLFO();
     
     // Set up voice mixers - voices 0-3 to mixer1, voices 4-5 to mixer2
     voiceMixerL1.gain(0, 0.25f); // Voice 0
@@ -256,25 +284,23 @@ void DroneSynthesizer::allNotesOff() {
 
 void DroneSynthesizer::setFilterCutoff(float cutoff) {
     filterCutoff = constrain(cutoff, 0.0f, 1.0f);
-    // Update will be applied to all voices in Phase 3 when filters are added
     Serial.printf("Filter cutoff set to %.2f (affects all voices)\n", filterCutoff);
 }
 
 void DroneSynthesizer::setFilterResonance(float resonance) {
     filterResonance = constrain(resonance, 0.0f, 1.0f);
-    // Update will be applied to all voices in Phase 3 when filters are added  
     Serial.printf("Filter resonance set to %.2f (affects all voices)\n", filterResonance);
 }
 
 void DroneSynthesizer::setLFORate(float rate) {
     lfoRate = constrain(rate, 0.1f, 10.0f);
-    globalLFO.frequency(lfoRate);
+    updateGlobalLFO();  // Update the actual LFO parameters
     Serial.printf("Global LFO rate set to %.2f Hz\n", lfoRate);
 }
 
 void DroneSynthesizer::setLFODepth(float depth) {
     lfoDepth = constrain(depth, 0.0f, 1.0f);
-    globalLFO.amplitude(lfoDepth);
+    updateGlobalLFO();  // Update the actual LFO parameters
     Serial.printf("Global LFO depth set to %.2f\n", lfoDepth);
 }
 
@@ -379,8 +405,37 @@ void DroneSynthesizer::updateGlobalLFO() {
     globalLFO.amplitude(lfoDepth);
 }
 
+// Phase 3 Step 2: Apply LFO modulation to all voice filters
+void DroneSynthesizer::updateAllVoiceFilters() {
+    // Read current LFO value (this returns a sample from the audio stream)
+    // Note: In a real implementation, this would be properly synchronized with audio blocks
+    // For now, we'll simulate LFO with a simple sine wave calculation
+    static unsigned long lastLFOUpdate = 0;
+    static float lfoPhase = 0.0f;
+    
+    unsigned long currentTime = millis();
+    if (currentTime - lastLFOUpdate >= 10) { // Update every 10ms for smooth modulation
+        lastLFOUpdate = currentTime;
+        
+        // Calculate LFO value: -1.0 to +1.0
+        lfoPhase += (lfoRate * 0.01f * 2.0f * PI); // 0.01 = 10ms update interval
+        if (lfoPhase > 2.0f * PI) lfoPhase -= 2.0f * PI;
+        
+        float lfoValue = sin(lfoPhase) * lfoDepth;
+        
+        // Apply LFO modulation to all active voices
+        for (int i = 0; i < MAX_VOICES; i++) {
+            voices[i].updateFilter(filterCutoff, filterResonance, lfoValue);
+        }
+    }
+}
+
 void DroneSynthesizer::processEnvelopes() {
+    // Update all voice envelopes
     for (int i = 0; i < MAX_VOICES; i++) {
         voices[i].updateEnvelope();
     }
+    
+    // Update filters with LFO modulation (Phase 3 Step 2)
+    updateAllVoiceFilters();
 }
