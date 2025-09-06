@@ -72,7 +72,7 @@ void setup()
     midi1.setHandleNoteOn(OnNoteOn);
     midi1.setHandleControlChange(OnControlChange);
     midi1.setHandlePitchChange(OnPitchChange);
-    AudioMemory(20); // Increased for soundfont player
+    AudioMemory(20); // Memory for audio processing
 
     Serial.println("Hello, world!");
     Serial8.begin(400000, SERIAL_8N1);
@@ -97,28 +97,7 @@ void setup()
     synth.getString(0).setTFTDisplay(&gfx);
     Serial.println("TFT display assigned to string synthesizer 0");
 
-    // Initialize SD card for soundfont loading
-    if (!SD.begin(BUILTIN_SDCARD))
-    {
-        Serial.println("SD card initialization failed - soundfonts will not be available");
-    }
-    else
-    {
-        Serial.println("SD card initialized");
-
-        // Try to load a soundfont file
-        if (synth.loadSoundfont("piano.sf2"))
-        {
-            Serial.println("Soundfont loaded successfully");
-            // Switch to soundfont mode (or use layered/split mode)
-            // synth.setSynthMode(HybridSynthesizer::SOUNDFONT_ONLY);
-            // synth.setSynthMode(HybridSynthesizer::LAYERED);
-        }
-        else
-        {
-            Serial.println("Failed to load soundfont, using string synthesis only");
-        }
-    }
+    Serial.println("Setup complete - ready for input");
 }
 
 void loop()
@@ -170,10 +149,6 @@ void OnRawPress(uint8_t keycode)
         case 58: // F1 - Strings only
             synth.setSynthMode(HybridSynthesizer::STRINGS_ONLY);
             Serial.println("Mode: STRINGS_ONLY");
-            break;
-        case 59: // F2 - Soundfont only
-            synth.setSynthMode(HybridSynthesizer::SOUNDFONT_ONLY);
-            Serial.println("Mode: SOUNDFONT_ONLY");
             break;
         case 60: // F3 - Layered
             synth.setSynthMode(HybridSynthesizer::LAYERED);
@@ -282,12 +257,6 @@ void OnControlChange(byte channel, byte control, byte value)
     {
         synth.setSynthMode(HybridSynthesizer::STRINGS_ONLY);
         Serial.println("Mode: STRINGS_ONLY (CC 51)");
-    }
-    
-    if (channel == 1 && control == 52 && value == 127) // CC 52 - Soundfont Only
-    {
-        synth.setSynthMode(HybridSynthesizer::SOUNDFONT_ONLY);
-        Serial.println("Mode: SOUNDFONT_ONLY (CC 52)");
     }
     
     if (channel == 1 && control == 53 && value == 127) // CC 53 - Layered
