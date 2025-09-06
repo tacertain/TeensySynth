@@ -8,6 +8,9 @@
 #include "HybridSynthesizer.h"
 #include "FrameBufferGFX.h"
 
+// Uncomment to disable TFT completely if it causes hanging
+// #define DISABLE_TFT
+
 /**
  * Pin usage:
  *
@@ -47,11 +50,15 @@ HybridSynthesizer synth; // Use the new hybrid synthesizer
 USBHost myusb;
 MIDIDevice midi1(myusb);
 
+// TFT initialization flag
+bool tftAvailable = false;
+
 // Function prototypes
 void OnNoteOn(byte channel, byte note, byte velocity);
 void OnNoteOff(byte channel, byte note, byte velocity);
 void OnControlChange(byte channel, byte control, byte value);
 void OnPitchChange(byte channel, int bend);
+void queryUSBDeviceInfo();
 
 uint32_t count = 0;
 uint16_t fb[240 * 320];
@@ -63,7 +70,7 @@ FramebufferGFX gfx(fb, 320, 240);
 
 void setup()
 {
-    // while (!Serial);
+    while (!Serial);
     myusb.begin();
     midi1.setHandleNoteOff(OnNoteOff);
     midi1.setHandleNoteOn(OnNoteOn);
@@ -75,6 +82,8 @@ void setup()
     Serial8.begin(400000, SERIAL_8N1);
 
     // Initialize TFT Display
+#ifdef TFT_DISPLAY
+
     Serial.println("Initializing TFT display...");
     if (!tft.begin(SPI_SPEED))
         Serial.println("failed");
@@ -93,7 +102,16 @@ void setup()
     // Set the first string synthesizer to use the TFT display
     synth.getString(0).setTFTDisplay(&gfx);
     Serial.println("TFT display assigned to string synthesizer 0");
+    tftAvailable = true;
+#else
+    Serial.println("TFT disabled by compile flag - skipping initialization");
+#endif
 
+    if (!tftAvailable) {
+        Serial.println("Running without TFT display - audio functionality will work normally");
+    }
+
+    queryUSBDeviceInfo();
     Serial.println("Setup complete - ready for input");
 }
 
@@ -117,7 +135,7 @@ void loop()
     synth.update();
     
     // tft.overlayFPS(fb); // optional: draw the current FPS on the top right corner of the framebuffer
-    if (gfx.updated())
+    if (tftAvailable && gfx.updated())
     {
         Serial.println("Start frame update");
         tft.update(fb);
@@ -288,6 +306,12 @@ void OnControlChange(byte channel, byte control, byte value)
         synth.getStringPad().loadPreset(StringPadSynthesizer::PRESET_SHIMMER);
         Serial.println("Mode: STRING_PADS + Shimmer preset (CC 57)");
     }
+    
+    if (channel == 1 && control == 58 && value == 127) // CC 58 - Query USB Device Info
+    {
+        Serial.println("Querying USB device information...");
+        queryUSBDeviceInfo();
+    }
 }
 
 void OnPitchChange(byte channel, int bend) // <-- Changed function name
@@ -300,4 +324,98 @@ void OnPitchChange(byte channel, int bend) // <-- Changed function name
     // Convert MIDI pitch bend (-8192 to +8191) to -4.0-4.0 range
     float bendAmount = (float)bend / 8192.0f * 4.0f;
     synth.setPitchBend(bendAmount);
+}
+
+void queryUSBDeviceInfo() 
+{
+    Serial.println("=== USB DEVICE INFORMATION ===");
+    
+    // The MIDIDevice doesn't have isConnected(), so we'll check if we can get device info
+    Serial.println("MIDI Device: Checking connection...");
+    
+    // Get USB device descriptor information
+    uint16_t vid = midi1.idVendor();
+    uint16_t pid = midi1.idProduct();
+    
+    if (vid == 0 && pid == 0) {
+        Serial.println("No USB MIDI device detected or device not ready");
+        Serial.println("==============================");
+        return;
+    }
+    
+    Serial.println("USB MIDI Device Detected: Yes");
+    
+    Serial.print("Vendor ID (VID): 0x");
+    if (vid < 0x1000) Serial.print("0");
+    if (vid < 0x100) Serial.print("0");
+    if (vid < 0x10) Serial.print("0");
+    Serial.print(vid, HEX);
+    Serial.print(" (");
+    Serial.print(vid);
+    Serial.println(")");
+    
+    Serial.print("Product ID (PID): 0x");
+    if (pid < 0x1000) Serial.print("0");
+    if (pid < 0x100) Serial.print("0");
+    if (pid < 0x10) Serial.print("0");
+    Serial.print(pid, HEX);
+    Serial.print(" (");
+    Serial.print(pid);
+    Serial.println(")");
+    
+    // Try to identify common manufacturers by VID
+    Serial.print("Manufacturer: ");
+    switch (vid) {
+        case 0x0944: Serial.println("Korg"); break;
+        case 0x0499: Serial.println("Yamaha"); break;
+        case 0x0582: Serial.println("Roland"); break;
+        case 0x0763: Serial.println("M-Audio"); break;
+        case 0x09E8: Serial.println("AKAI Professional"); break;
+        case 0x0A4E: Serial.println("Native Instruments"); break;
+        case 0x1C75: Serial.println("Novation"); break;
+        case 0x2011: Serial.println("MIDI Solutions"); break;
+        case 0x133E: Serial.println("Access Music"); break;
+        case 0x15CA: Serial.println("Textech Int'l"); break;
+        case 0x0543: Serial.println("Zoom"); break;
+        case 0x0644: Serial.println("TASCAM"); break;
+        case 0x0A92: Serial.println("Presonus"); break;
+        case 0x194F: Serial.println("PreSonus Audio Electronics"); break;
+        case 0x0A46: Serial.println("Daisy Chain"); break;
+        case 0x041E: Serial.println("Creative Technology"); break;
+        case 0x1397: Serial.println("BEHRINGER"); break;
+        case 0x09DA: Serial.println("A4Tech"); break;
+        case 0x0955: Serial.println("NVIDIA"); break;
+        case 0x17CC: Serial.println("Native Instruments (Alt)"); break;
+        case 0x2573: Serial.println("Arturia"); break;
+        default: 
+            Serial.print("Unknown (VID: 0x");
+            Serial.print(vid, HEX);
+            Serial.println(")");
+            break;
+    }
+    
+    // Get manufacturer and product strings if available
+    const uint8_t* mfgStr = midi1.manufacturer();
+    const uint8_t* prodStr = midi1.product();
+    const uint8_t* serialStr = midi1.serialNumber();
+    
+    if (mfgStr && mfgStr[0] != 0) {
+        Serial.print("Manufacturer String: \"");
+        Serial.print((char*)mfgStr);
+        Serial.println("\"");
+    }
+    
+    if (prodStr && prodStr[0] != 0) {
+        Serial.print("Product String: \"");
+        Serial.print((char*)prodStr);
+        Serial.println("\"");
+    }
+    
+    if (serialStr && serialStr[0] != 0) {
+        Serial.print("Serial Number: \"");
+        Serial.print((char*)serialStr);
+        Serial.println("\"");
+    }
+    
+    Serial.println("==============================");
 }
