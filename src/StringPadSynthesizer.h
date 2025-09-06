@@ -15,12 +15,19 @@
  */
 class StringPadSynthesizer {
 public:
+    // Chord mode enum - must be declared before use in method signatures
+    enum ChordMode {
+        CHORD_MODE_OFF = 0,     // Normal single note mode
+        CHORD_MODE_MAJOR,       // Major chord mode
+        CHORD_MODE_OCTAVE       // Single note plus octave mode
+    };
+
     StringPadSynthesizer();
     ~StringPadSynthesizer();
 
     // Polyphonic voice control (Phase 2)
-    void noteOn(int midiNote, float velocity);
-    void noteOff(int midiNote);
+    void noteOn(int midiNote, float velocity, ChordMode chordMode = CHORD_MODE_OFF);
+    void noteOff(int midiNote, ChordMode chordMode = CHORD_MODE_OFF);
     void allNotesOff();
     int getActiveVoiceCount() const;
     
@@ -50,12 +57,6 @@ public:
     void loadPreset(StringPadPreset preset);
     StringPadPreset getCurrentPreset() const;
     const char* getPresetName(StringPadPreset preset) const;
-    
-    // Chord mode
-    enum ChordMode {
-        CHORD_MODE_OFF = 0,     // Normal single note mode
-        CHORD_MODE_MAJOR        // Major chord mode
-    };
     
     void setChordMode(ChordMode mode);
     ChordMode getChordMode() const;
@@ -155,6 +156,8 @@ private:
     // Chord generation helpers
     void playMajorChord(int rootNote, float velocity);
     void stopMajorChord(int rootNote);
+    void playOctaveNote(int rootNote, float velocity);
+    void stopOctaveNote(int rootNote);
     void updateAllVoiceParameters();
     
     // Utility methods

@@ -52,7 +52,7 @@ private:
     float droneVolume = 1.0f;
     float stringPadVolume = 1.0f;
     
-    SynthMode currentMode = PLUCKED_STRINGS;  // Updated default mode
+    SynthMode currentMode = SPLIT; 
     uint8_t splitPoint = 48; // C3 
 
 public:
@@ -172,15 +172,25 @@ public:
                 drone.noteOn(key, velocity);
                 break;
             case STRING_PADS:
-                // Use single voice for Phase 1
-                stringPad.noteOn(key, velocity);
+                // Pass the current chord mode directly
+                stringPad.noteOn(key, velocity, stringPad.getChordMode());
                 break;
             case SPLIT:
                 // Split mode: drone below split point, string pads above
                 if (key < splitPoint) {
                     drone.noteOn(key, velocity);
                 } else {
-                    stringPad.noteOn(key, velocity);
+                    // Use chord mode for specific keys in split mode
+                    StringPadSynthesizer::ChordMode chordMode = StringPadSynthesizer::CHORD_MODE_OFF;
+                    if (key >= 53 && key <= 57) {
+                        chordMode = StringPadSynthesizer::CHORD_MODE_MAJOR;
+                    }
+                    else if (key == 60)
+                    {
+                        chordMode = StringPadSynthesizer::CHORD_MODE_OCTAVE;
+                    }
+                    key += 12;
+                    stringPad.noteOn(key, velocity, chordMode);
                 }
                 break;
         }
@@ -204,15 +214,24 @@ public:
                 drone.noteOff(key);
                 break;
             case STRING_PADS:
-                // Use polyphonic note off
-                stringPad.noteOff(key);
+                // Pass the current chord mode directly
+                stringPad.noteOff(key, stringPad.getChordMode());
                 break;
             case SPLIT:
                 // Split mode: drone below split point, string pads above
                 if (key < splitPoint) {
                     drone.noteOff(key);
                 } else {
-                    stringPad.noteOff(key);
+                    // Use chord mode for specific keys in split mode
+                    StringPadSynthesizer::ChordMode chordMode = StringPadSynthesizer::CHORD_MODE_OFF;
+                    if (key >= 53 && key <= 57) {
+                        chordMode = StringPadSynthesizer::CHORD_MODE_MAJOR;
+                    }
+                    else if (key == 60) {
+                        chordMode = StringPadSynthesizer::CHORD_MODE_OCTAVE;
+                    }
+                    key += 12;
+                    stringPad.noteOff(key, chordMode);
                 }
                 break;
         }

@@ -275,50 +275,64 @@ StringPadSynthesizer::~StringPadSynthesizer() {
     }
 }
 
-void StringPadSynthesizer::noteOn(int midiNote, float velocity) {
+void StringPadSynthesizer::noteOn(int midiNote, float velocity, ChordMode chordMode) {
     if (velocity <= 0.0f || velocity > 1.0f) {
         return;
     }
     
-    if (chordMode == CHORD_MODE_MAJOR) {
-        // Play major chord instead of single note
-        playMajorChord(midiNote, velocity);
-    } else {
-        // Original single note behavior
-        // Check if this note is already playing
-        int existingVoice = findVoicePlayingNote(midiNote);
-        if (existingVoice >= 0) {
-            // Retrigger existing note
-            voices[existingVoice].stopNote();
-        }
-        
-        // Find an available voice
-        int voiceIndex = findAvailableVoice();
-        if (voiceIndex < 0) {
-            // No available voices, steal the oldest one
-            voiceIndex = findOldestVoice();
-        }
-        
-        if (voiceIndex >= 0) {
-            float frequency = midiNoteToFrequency(midiNote);
-            voices[voiceIndex].startNote(midiNote, frequency, velocity);
-            voices[voiceIndex].updateOscillatorFrequencies(frequency, detuneAmount);
-            voices[voiceIndex].updateFilter(filterCutoff, filterResonance);
-        }
+    switch (chordMode) {
+        case CHORD_MODE_MAJOR:
+            // Play major chord instead of single note
+            playMajorChord(midiNote, velocity);
+            break;
+        case CHORD_MODE_OCTAVE:
+            // Play single note plus octave
+            playOctaveNote(midiNote, velocity);
+            break;
+        default: // CHORD_MODE_OFF
+            // Original single note behavior
+            // Check if this note is already playing
+            int existingVoice = findVoicePlayingNote(midiNote);
+            if (existingVoice >= 0) {
+                // Retrigger existing note
+                voices[existingVoice].stopNote();
+            }
+            
+            // Find an available voice
+            int voiceIndex = findAvailableVoice();
+            if (voiceIndex < 0) {
+                // No available voices, steal the oldest one
+                voiceIndex = findOldestVoice();
+            }
+            
+            if (voiceIndex >= 0) {
+                float frequency = midiNoteToFrequency(midiNote);
+                voices[voiceIndex].startNote(midiNote, frequency, velocity);
+                voices[voiceIndex].updateOscillatorFrequencies(frequency, detuneAmount);
+                voices[voiceIndex].updateFilter(filterCutoff, filterResonance);
+            }
+            break;
     }
 }
 
-void StringPadSynthesizer::noteOff(int midiNote) {
-    if (chordMode == CHORD_MODE_MAJOR) {
-        // Stop major chord
-        stopMajorChord(midiNote);
-    } else {
-        // Original single note behavior
-        // Find the voice playing this note
-        int voiceIndex = findVoicePlayingNote(midiNote);
-        if (voiceIndex >= 0) {
-            voices[voiceIndex].stopNote();
-        }
+void StringPadSynthesizer::noteOff(int midiNote, ChordMode chordMode) {
+    switch (chordMode) {
+        case CHORD_MODE_MAJOR:
+            // Stop major chord
+            stopMajorChord(midiNote);
+            break;
+        case CHORD_MODE_OCTAVE:
+            // Stop octave notes
+            stopOctaveNote(midiNote);
+            break;
+        default: // CHORD_MODE_OFF
+            // Original single note behavior
+            // Find the voice playing this note
+            int voiceIndex = findVoicePlayingNote(midiNote);
+            if (voiceIndex >= 0) {
+                voices[voiceIndex].stopNote();
+            }
+            break;
     }
 }
 
@@ -542,6 +556,54 @@ void StringPadSynthesizer::stopMajorChord(int rootNote) {
     // Stop each note of the chord
     for (int i = 0; i < 6; i++) {
         int voiceIndex = findVoicePlayingNote(chordNotes[i]);
+        if (voiceIndex >= 0) {
+            voices[voiceIndex].stopNote();
+        }
+    }
+}
+
+void StringPadSynthesizer::playOctaveNote(int rootNote, float velocity) {
+    // Play the root note and the note one octave higher (2 notes total)
+    int octaveNotes[2] = {
+        rootNote,       // Root note
+        rootNote + 12   // One octave higher
+    };
+    
+    // Play each note
+    for (int i = 0; i < 2; i++) {
+        // Check if this note is already playing
+        int existingVoice = findVoicePlayingNote(octaveNotes[i]);
+        if (existingVoice >= 0) {
+            // Retrigger existing note
+            voices[existingVoice].stopNote();
+        }
+        
+        // Find an available voice
+        int voiceIndex = findAvailableVoice();
+        if (voiceIndex < 0) {
+            // No available voices, steal the oldest one
+            voiceIndex = findOldestVoice();
+        }
+        
+        if (voiceIndex >= 0) {
+            float frequency = midiNoteToFrequency(octaveNotes[i]);
+            voices[voiceIndex].startNote(octaveNotes[i], frequency, velocity);
+            voices[voiceIndex].updateOscillatorFrequencies(frequency, detuneAmount);
+            voices[voiceIndex].updateFilter(filterCutoff, filterResonance);
+        }
+    }
+}
+
+void StringPadSynthesizer::stopOctaveNote(int rootNote) {
+    // Stop the root note and the note one octave higher (2 notes total)
+    int octaveNotes[2] = {
+        rootNote,       // Root note
+        rootNote + 12   // One octave higher
+    };
+    
+    // Stop each note
+    for (int i = 0; i < 2; i++) {
+        int voiceIndex = findVoicePlayingNote(octaveNotes[i]);
         if (voiceIndex >= 0) {
             voices[voiceIndex].stopNote();
         }

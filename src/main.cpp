@@ -309,15 +309,22 @@ void OnControlChange(byte channel, byte control, byte value)
         Serial.println("Mode: SPLIT - Drone below C5, String Pads above (CC 58)");
     }
     
-    if (channel == 1 && control == 59 && value == 127) // CC 59 - Toggle String Pad Chord Mode
+    if (channel == 1 && control == 59 && value == 127) // CC 59 - Cycle String Pad Chord Mode
     {
         StringPadSynthesizer::ChordMode currentMode = synth.getStringPad().getChordMode();
-        if (currentMode == StringPadSynthesizer::CHORD_MODE_OFF) {
-            synth.getStringPad().setChordMode(StringPadSynthesizer::CHORD_MODE_MAJOR);
-            Serial.println("String Pad Chord Mode: ON - Playing major chords (CC 59)");
-        } else {
-            synth.getStringPad().setChordMode(StringPadSynthesizer::CHORD_MODE_OFF);
-            Serial.println("String Pad Chord Mode: OFF - Playing single notes (CC 59)");
+        switch (currentMode) {
+            case StringPadSynthesizer::CHORD_MODE_OFF:
+                synth.getStringPad().setChordMode(StringPadSynthesizer::CHORD_MODE_MAJOR);
+                Serial.println("String Pad Chord Mode: MAJOR - Playing major chords (CC 59)");
+                break;
+            case StringPadSynthesizer::CHORD_MODE_MAJOR:
+                synth.getStringPad().setChordMode(StringPadSynthesizer::CHORD_MODE_OCTAVE);
+                Serial.println("String Pad Chord Mode: OCTAVE - Playing octave notes (CC 59)");
+                break;
+            case StringPadSynthesizer::CHORD_MODE_OCTAVE:
+                synth.getStringPad().setChordMode(StringPadSynthesizer::CHORD_MODE_OFF);
+                Serial.println("String Pad Chord Mode: OFF - Playing single notes (CC 59)");
+                break;
         }
     }
 }
