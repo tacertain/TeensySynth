@@ -96,6 +96,8 @@ private:
         
         // Envelope state
         float currentGain;
+        float attackTimeMs;               // Attack time in milliseconds
+        float releaseTimeMs;              // Release time in milliseconds
         
         // Audio connections
         AudioConnection *patchCord1; // osc1 to mixer
@@ -112,6 +114,7 @@ private:
         void startNote(int note, float freq, float vel);
         void stopNote();
         void updateEnvelope();
+        void updateEnvelopeParameters(float attackMs, float releaseMs);
         void updateOscillatorFrequencies(float baseFreq, float detuneAmount);
         void updateFilter(float cutoff, float resonance);
         void updateHighpassFilter(float multiplier);

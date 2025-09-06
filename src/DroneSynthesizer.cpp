@@ -137,7 +137,7 @@ DroneSynthesizer::DroneSynthesizer()
     , attackTime(200.0f)
     , sustainLevel(0.8f)
     , releaseTime(800.0f)
-    , masterVolume(1.0f)
+    , masterVolume(.25f)
 {
     // Initialize all voices
     for (int i = 0; i < MAX_VOICES; i++) {

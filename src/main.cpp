@@ -159,7 +159,7 @@ void OnNoteOn(byte channel, byte note, byte velocity)
     Serial.print(vel);
     Serial.print(")");
     Serial.println();
-    synth.noteOn(note, freq, vel);
+    synth.noteOn(note, freq, 1.0f);
 }
 
 void OnNoteOff(byte channel, byte note, byte velocity)
@@ -331,7 +331,6 @@ void OnControlChange(byte channel, byte control, byte value)
     if (channel == 1 && control == 45) // CC 45 - Highpass Filter Multiplier
     {
         // Exponential mapping: CC 0 -> 0.05, CC 64 -> 1.0, CC 127 -> 4.0
-        float normalizedValue = (float)value / 127.0f;  // 0.0 to 1.0
         float multiplier;
         
         if (value <= 64) {

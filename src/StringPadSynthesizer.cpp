@@ -61,6 +61,8 @@ StringPadSynthesizer::StringVoice::StringVoice()
     , releasing(false)
     , voiceId(-1)
     , currentGain(0.0f)
+    , attackTimeMs(200.0f)            // Default 200ms attack
+    , releaseTimeMs(1000.0f)          // Default 1000ms release
     , patchCord1(nullptr)
     , patchCord2(nullptr)
     , patchCord3(nullptr)
@@ -161,10 +163,9 @@ void StringPadSynthesizer::StringVoice::updateEnvelope() {
         // Attack phase - ramp up from 0 to velocity level
         unsigned long attackTime = currentTime - noteOnTime;
         
-        // Simple linear attack for now - could be improved with exponential curves
-        constexpr unsigned long ATTACK_TIME_MS = 100;
-        if (attackTime < ATTACK_TIME_MS) {
-            float attackProgress = (float)attackTime / (float)ATTACK_TIME_MS;
+        // Use configurable attack time instead of hardcoded value
+        if (attackTime < (unsigned long)attackTimeMs) {
+            float attackProgress = (float)attackTime / attackTimeMs;
             currentGain = velocity * 0.6f * attackProgress; // 0.6 max gain for headroom
         } else {
             // Sustain phase
@@ -181,10 +182,9 @@ void StringPadSynthesizer::StringVoice::updateEnvelope() {
         
         unsigned long releaseTime = currentTime - noteOffTime;
         
-        // Simple linear release - RELEASE_TIME_MS constant
-        constexpr unsigned long RELEASE_TIME_MS = 200;
-        if (releaseTime < RELEASE_TIME_MS) {
-            float releaseProgress = (float)releaseTime / (float)RELEASE_TIME_MS;
+        // Use configurable release time instead of hardcoded value
+        if (releaseTime < (unsigned long)releaseTimeMs) {
+            float releaseProgress = (float)releaseTime / releaseTimeMs;
             currentGain = velocity * 0.6f * (1.0f - releaseProgress);
             envAmp.gain(currentGain);
         } else {
@@ -233,6 +233,11 @@ void StringPadSynthesizer::StringVoice::updateHighpassFilter(float multiplier) {
     if (highpassFreq > 8000.0f) highpassFreq = 8000.0f;
     
     highpassFilter.frequency(highpassFreq);
+}
+
+void StringPadSynthesizer::StringVoice::updateEnvelopeParameters(float attackMs, float releaseMs) {
+    attackTimeMs = constrain(attackMs, 10.0f, 5000.0f);    // 10ms to 5s
+    releaseTimeMs = constrain(releaseMs, 10.0f, 10000.0f); // 10ms to 10s
 }
 
 // StringPadSynthesizer implementation
@@ -334,8 +339,13 @@ void StringPadSynthesizer::noteOn(int midiNote, float velocity, ChordMode chordM
             // Check if this note is already playing
             int existingVoice = findVoicePlayingNote(midiNote);
             if (existingVoice >= 0) {
-                // Retrigger existing note
-                voices[existingVoice].stopNote();
+                // Retrigger existing note - reuse the same voice
+                float frequency = midiNoteToFrequency(midiNote);
+                voices[existingVoice].startNote(midiNote, frequency, velocity);
+                voices[existingVoice].updateOscillatorFrequencies(frequency, detuneAmount);
+                voices[existingVoice].updateFilter(filterCutoff, filterResonance);
+                voices[existingVoice].updateHighpassFilter(highpassMultiplier);
+                break; // Exit here since we reused the existing voice
             }
             
             // Find an available voice
@@ -422,14 +432,12 @@ void StringPadSynthesizer::setHighpassMultiplier(float multiplier) {
 
 void StringPadSynthesizer::setAttackTime(float attackMs) {
     attackTime = constrain(attackMs, 50.0f, 2000.0f);
-    // Note: Currently using hardcoded attack time in envelope
-    // Will be implemented properly in later phases
+    updateVoiceParameters();
 }
 
 void StringPadSynthesizer::setReleaseTime(float releaseMs) {
     releaseTime = constrain(releaseMs, 100.0f, 5000.0f);
-    // Note: Currently using hardcoded release time in envelope
-    // Will be implemented properly in later phases
+    updateVoiceParameters();
 }
 
 void StringPadSynthesizer::setVolume(float volume) {
@@ -472,6 +480,7 @@ void StringPadSynthesizer::updateAllVoiceParameters() {
     for (int i = 0; i < MAX_VOICES; i++) {
         voices[i].updateFilter(filterCutoff, filterResonance);
         voices[i].updateHighpassFilter(highpassMultiplier);
+        voices[i].updateEnvelopeParameters(attackTime, releaseTime);
         if (voices[i].active) {
             voices[i].updateOscillatorFrequencies(voices[i].baseFrequency, detuneAmount);
         }
