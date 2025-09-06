@@ -51,6 +51,15 @@ public:
     StringPadPreset getCurrentPreset() const;
     const char* getPresetName(StringPadPreset preset) const;
     
+    // Chord mode
+    enum ChordMode {
+        CHORD_MODE_OFF = 0,     // Normal single note mode
+        CHORD_MODE_MAJOR        // Major chord mode
+    };
+    
+    void setChordMode(ChordMode mode);
+    ChordMode getChordMode() const;
+    
     // Audio output
     AudioStream* getOutput();
     
@@ -122,6 +131,9 @@ private:
     float releaseTime;         // milliseconds
     float masterVolume;        // 0.0 - 1.0
     
+    // Chord mode
+    ChordMode chordMode;
+    
     // Preset system (Phase 3)
     struct PresetData {
         float filterCutoff;
@@ -139,6 +151,10 @@ private:
     int findAvailableVoice();
     int findVoicePlayingNote(int midiNote);
     int findOldestVoice();
+    
+    // Chord generation helpers
+    void playMajorChord(int rootNote, float velocity);
+    void stopMajorChord(int rootNote);
     void updateAllVoiceParameters();
     
     // Utility methods

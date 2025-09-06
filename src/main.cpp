@@ -308,6 +308,18 @@ void OnControlChange(byte channel, byte control, byte value)
         synth.setSynthMode(HybridSynthesizer::SPLIT);
         Serial.println("Mode: SPLIT - Drone below C5, String Pads above (CC 58)");
     }
+    
+    if (channel == 1 && control == 59 && value == 127) // CC 59 - Toggle String Pad Chord Mode
+    {
+        StringPadSynthesizer::ChordMode currentMode = synth.getStringPad().getChordMode();
+        if (currentMode == StringPadSynthesizer::CHORD_MODE_OFF) {
+            synth.getStringPad().setChordMode(StringPadSynthesizer::CHORD_MODE_MAJOR);
+            Serial.println("String Pad Chord Mode: ON - Playing major chords (CC 59)");
+        } else {
+            synth.getStringPad().setChordMode(StringPadSynthesizer::CHORD_MODE_OFF);
+            Serial.println("String Pad Chord Mode: OFF - Playing single notes (CC 59)");
+        }
+    }
 }
 
 void OnPitchChange(byte channel, int bend) // <-- Changed function name
