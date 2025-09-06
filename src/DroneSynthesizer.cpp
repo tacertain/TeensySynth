@@ -128,11 +128,11 @@ void DroneSynthesizer::DroneVoice::updateFilter(float cutoff, float resonance, f
 
 // Main DroneSynthesizer implementation  
 DroneSynthesizer::DroneSynthesizer() 
-    : filterCutoff(0.5f)
+    : filterCutoff(0.3f)
     , filterResonance(0.3f)
-    , lfoRate(2.0f)
-    , lfoDepth(0.2f)
-    , oscillatorDetune(0.05f)
+    , lfoRate(0.33f)
+    , lfoDepth(0.75f)
+    , oscillatorDetune(-0.11f)
     , pulseWidth(0.5f)
     , attackTime(200.0f)
     , sustainLevel(0.8f)

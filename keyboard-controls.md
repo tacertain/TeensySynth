@@ -75,6 +75,23 @@ Connect a MIDI controller or DAW for real-time parameter control:
   - Strings: Up to 8 simultaneous notes
   - Drone: Up to 6 simultaneous notes
 
+
+## Default Synth Parameters
+
+When the TeensySynth starts, the following default values are set for the drone synthesizer:
+
+- **Detune:** -0.11 (slight negative detuning for analog warmth)
+- **LFO Depth:** 0.75 (strong filter modulation by default)
+- **Filter Cutoff:** 0.3 (low/mid filter position for mellow pad sound)
+- **LFO Rate:** 0.33 Hz (slow breathing/pulsing effect)
+
+You can override these defaults at any time using the MIDI CC controls:
+- **CC 24:** Filter Cutoff
+- **CC 25:** LFO Rate
+- **CC 26:** Detune
+- **CC 27:** LFO Depth
+
+---
 ## Current Sound Characteristics
 
 ### String Synthesizer
