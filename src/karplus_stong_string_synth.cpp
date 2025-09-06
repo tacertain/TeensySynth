@@ -180,6 +180,10 @@ void drawBufferGraph(FramebufferGFX* gfx, int16_t* buffer, uint16_t bufferLen, f
 {
 	if (!gfx || !buffer) return;
 
+	// Our last update hasn't made it to the display yet, so try again next time
+	if (gfx->updated())
+		return;
+
 	Serial.println("Start drawBufferGraph");
 	const int graphY = 0;
 	const int graphHeight = gfx->height() - 20;
