@@ -1,6 +1,55 @@
 #include "StringPadSynthesizer.h"
 #include <Arduino.h>
 
+// Preset definitions for classic 80s string pad sounds
+const StringPadSynthesizer::PresetData StringPadSynthesizer::presetData[PRESET_COUNT] = {
+    // PRESET_LUSH_PADS - "I Ran" style lush string pads
+    {
+        .filterCutoff = 0.4f,       // Warm, not too bright
+        .filterResonance = 0.3f,    // Gentle resonance
+        .detuneAmount = 0.7f,       // Rich ensemble effect
+        .masterVolume = 0.8f,       // Full but controlled volume
+        .attackTime = 200.0f,       // Smooth attack
+        .releaseTime = 800.0f       // Long, sustaining release
+    },
+    // PRESET_BRIGHT_STRINGS - Brighter, more aggressive strings
+    {
+        .filterCutoff = 0.7f,       // Brighter sound
+        .filterResonance = 0.4f,    // More character
+        .detuneAmount = 0.5f,       // Moderate ensemble
+        .masterVolume = 0.9f,       // Punchy volume
+        .attackTime = 150.0f,       // Quicker attack
+        .releaseTime = 600.0f       // Medium release
+    },
+    // PRESET_SOFT_ENSEMBLE - Soft, subtle ensemble strings  
+    {
+        .filterCutoff = 0.3f,       // Very warm
+        .filterResonance = 0.2f,    // Subtle resonance
+        .detuneAmount = 0.4f,       // Gentle ensemble
+        .masterVolume = 0.6f,       // Soft volume
+        .attackTime = 300.0f,       // Slow, gentle attack
+        .releaseTime = 1200.0f      // Very long release
+    },
+    // PRESET_ANALOG_WARMTH - Warm analog-style pads
+    {
+        .filterCutoff = 0.35f,      // Warm analog sound
+        .filterResonance = 0.5f,    // Analog-style resonance
+        .detuneAmount = 0.8f,       // Heavy ensemble for analog feel
+        .masterVolume = 0.7f,       // Moderate volume
+        .attackTime = 250.0f,       // Classic analog attack
+        .releaseTime = 1000.0f      // Standard analog release
+    },
+    // PRESET_SHIMMER - Shimmery, ethereal strings
+    {
+        .filterCutoff = 0.6f,       // Bright and airy
+        .filterResonance = 0.6f,    // Emphasize harmonics
+        .detuneAmount = 0.9f,       // Maximum ensemble shimmer
+        .masterVolume = 0.7f,       // Ethereal volume
+        .attackTime = 400.0f,       // Slow, building attack
+        .releaseTime = 1500.0f      // Long, shimmering decay
+    }
+};
+
 // StringVoice implementation
 StringPadSynthesizer::StringVoice::StringVoice() 
     : active(false)
@@ -118,9 +167,10 @@ void StringPadSynthesizer::StringVoice::updateEnvelope() {
         
         unsigned long releaseTime = currentTime - noteOffTime;
         
-        // Simple linear release - 1000ms default
-        if (releaseTime < 1000) {
-            float releaseProgress = (float)releaseTime / 1000.0f;
+        // Simple linear release - RELEASE_TIME_MS constant
+        constexpr unsigned long RELEASE_TIME_MS = 200;
+        if (releaseTime < RELEASE_TIME_MS) {
+            float releaseProgress = (float)releaseTime / (float)RELEASE_TIME_MS;
             currentGain = velocity * 0.6f * (1.0f - releaseProgress);
             envAmp.gain(currentGain);
         } else {
@@ -165,6 +215,7 @@ StringPadSynthesizer::StringPadSynthesizer()
     , attackTime(200.0f)        // 200ms attack
     , releaseTime(1000.0f)      // 1000ms release
     , masterVolume(0.8f)        // 80% volume
+    , currentPreset(PRESET_LUSH_PADS)  // Default to lush pads preset
 {
     // Initialize all voices
     for (int i = 0; i < MAX_VOICES; i++) {
@@ -384,4 +435,35 @@ int StringPadSynthesizer::findOldestVoice() {
     }
     
     return oldestVoice;
+}
+
+// Preset system methods (Phase 3)
+void StringPadSynthesizer::loadPreset(StringPadPreset preset) {
+    if (preset >= PRESET_COUNT) return;
+    
+    currentPreset = preset;
+    const PresetData& data = presetData[preset];
+    
+    // Load preset parameters
+    setFilterCutoff(data.filterCutoff);
+    setFilterResonance(data.filterResonance);
+    setDetuneAmount(data.detuneAmount);
+    setVolume(data.masterVolume);
+    setAttackTime(data.attackTime);
+    setReleaseTime(data.releaseTime);
+}
+
+StringPadSynthesizer::StringPadPreset StringPadSynthesizer::getCurrentPreset() const {
+    return currentPreset;
+}
+
+const char* StringPadSynthesizer::getPresetName(StringPadPreset preset) const {
+    switch (preset) {
+        case PRESET_LUSH_PADS:      return "Lush Pads";
+        case PRESET_BRIGHT_STRINGS: return "Bright Strings";
+        case PRESET_SOFT_ENSEMBLE:  return "Soft Ensemble";
+        case PRESET_ANALOG_WARMTH:  return "Analog Warmth";
+        case PRESET_SHIMMER:        return "Shimmer";
+        default:                    return "Unknown";
+    }
 }

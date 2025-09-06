@@ -240,22 +240,53 @@ void OnControlChange(byte channel, byte control, byte value)
         Serial.printf("String pad detune amount: %.2f\n", (float)value / 127.0f);
     }
 
+    // Mode Switching Controls
     if (channel == 1 && control == 51 && value == 127) // CC 51 - Plucked Strings
     {
         synth.setSynthMode(HybridSynthesizer::PLUCKED_STRINGS);
         Serial.println("Mode: PLUCKED_STRINGS (CC 51)");
     }
     
-    if (channel == 1 && control == 54 && value == 127) // CC 54 - Drone
+    if (channel == 1 && control == 52 && value == 127) // CC 52 - Drone
     {
         synth.setSynthMode(HybridSynthesizer::DRONE);
-        Serial.println("Mode: DRONE (CC 54)");
+        Serial.println("Mode: DRONE (CC 52)");
     }
     
-    if (channel == 1 && control == 55 && value == 127) // CC 55 - String Pads
+    // String Pad Mode with Presets (CC 53-57) - Switch to String Pads and load preset
+    if (channel == 1 && control == 53 && value == 127) // CC 53 - String Pads: Lush Pads
     {
         synth.setSynthMode(HybridSynthesizer::STRING_PADS);
-        Serial.println("Mode: STRING_PADS (CC 47)");
+        synth.getStringPad().loadPreset(StringPadSynthesizer::PRESET_LUSH_PADS);
+        Serial.println("Mode: STRING_PADS + Lush Pads preset (CC 53)");
+    }
+    
+    if (channel == 1 && control == 54 && value == 127) // CC 54 - String Pads: Bright Strings
+    {
+        synth.setSynthMode(HybridSynthesizer::STRING_PADS);
+        synth.getStringPad().loadPreset(StringPadSynthesizer::PRESET_BRIGHT_STRINGS);
+        Serial.println("Mode: STRING_PADS + Bright Strings preset (CC 54)");
+    }
+    
+    if (channel == 1 && control == 55 && value == 127) // CC 55 - String Pads: Soft Ensemble
+    {
+        synth.setSynthMode(HybridSynthesizer::STRING_PADS);
+        synth.getStringPad().loadPreset(StringPadSynthesizer::PRESET_SOFT_ENSEMBLE);
+        Serial.println("Mode: STRING_PADS + Soft Ensemble preset (CC 55)");
+    }
+    
+    if (channel == 1 && control == 56 && value == 127) // CC 56 - String Pads: Analog Warmth
+    {
+        synth.setSynthMode(HybridSynthesizer::STRING_PADS);
+        synth.getStringPad().loadPreset(StringPadSynthesizer::PRESET_ANALOG_WARMTH);
+        Serial.println("Mode: STRING_PADS + Analog Warmth preset (CC 56)");
+    }
+    
+    if (channel == 1 && control == 57 && value == 127) // CC 57 - String Pads: Shimmer
+    {
+        synth.setSynthMode(HybridSynthesizer::STRING_PADS);
+        synth.getStringPad().loadPreset(StringPadSynthesizer::PRESET_SHIMMER);
+        Serial.println("Mode: STRING_PADS + Shimmer preset (CC 57)");
     }
 }
 

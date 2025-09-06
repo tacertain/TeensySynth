@@ -29,8 +29,15 @@ Connect a MIDI controller or DAW for real-time parameter control:
 
 #### Mode Switching (Channel 1)
 - **CC 51** (value 127): Switch to Plucked Strings
-- **CC 54** (value 127): Switch to Drone mode
-- **CC 55** (value 127): Switch to String Pads mode
+- **CC 52** (value 127): Switch to Drone mode
+
+#### String Pad Mode + Preset Selection (Channel 1)
+*Each CC both switches to String Pads mode AND loads the specified preset:*
+- **CC 53** (value 127): String Pads + **"Lush Pads"** preset
+- **CC 54** (value 127): String Pads + **"Bright Strings"** preset  
+- **CC 55** (value 127): String Pads + **"Soft Ensemble"** preset
+- **CC 56** (value 127): String Pads + **"Analog Warmth"** preset
+- **CC 57** (value 127): String Pads + **"Shimmer"** preset
 
 #### Volume Controls (Channel 1)
 - **CC 7**: Master Volume (0-127) - Controls overall output level
@@ -56,6 +63,8 @@ Connect a MIDI controller or DAW for real-time parameter control:
 - **CC 44**: String Pad Detune Amount (0-127) - Ensemble detuning for all voices (0-15 cents range)
 
 *Note: All string pad parameter changes affect all 6 active voices simultaneously for real-time performance control.*
+
+*Note: String pad presets are selected via mode switching (CC 53-57). You can manually adjust CC 41-44 after switching to a preset mode for fine-tuning.*
 
 #### Global Controls (Channel 1)
 - **Pitch Bend**: Pitch bend wheel affects all active voices

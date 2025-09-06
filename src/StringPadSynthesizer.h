@@ -37,6 +37,20 @@ public:
     // Volume control
     void setVolume(float volume);           // 0.0 - 1.0
     
+    // Preset system (Phase 3)
+    enum StringPadPreset {
+        PRESET_LUSH_PADS = 0,      // "I Ran" style lush string pads
+        PRESET_BRIGHT_STRINGS,     // Brighter, more aggressive strings
+        PRESET_SOFT_ENSEMBLE,      // Soft, subtle ensemble strings
+        PRESET_ANALOG_WARMTH,      // Warm analog-style pads
+        PRESET_SHIMMER,            // Shimmery, ethereal strings
+        PRESET_COUNT               // Number of presets
+    };
+    
+    void loadPreset(StringPadPreset preset);
+    StringPadPreset getCurrentPreset() const;
+    const char* getPresetName(StringPadPreset preset) const;
+    
     // Audio output
     AudioStream* getOutput();
     
@@ -107,6 +121,19 @@ private:
     float attackTime;          // milliseconds
     float releaseTime;         // milliseconds
     float masterVolume;        // 0.0 - 1.0
+    
+    // Preset system (Phase 3)
+    struct PresetData {
+        float filterCutoff;
+        float filterResonance;
+        float detuneAmount;
+        float masterVolume;
+        float attackTime;
+        float releaseTime;
+    };
+    
+    static const PresetData presetData[PRESET_COUNT];
+    StringPadPreset currentPreset;
     
     // Voice allocation system
     int findAvailableVoice();
