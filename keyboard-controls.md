@@ -17,9 +17,10 @@ The synthesizer has three main modes:
 - Designed to recreate classic Korg MS-10 sounds like those in "I Ran" by Flock of Seagulls
 
 ### 3. **STRING_PADS** Mode
-- Classic 80s string synthesizer with ensemble chorus effect
-- Single voice (Phase 1 implementation)
-- Warm, sustained string pad sounds with 3-layer ensemble detuning
+- Classic 80s string synthesizer with ensemble chorus effect  
+- 6-voice polyphony with intelligent voice allocation (Phase 2)
+- Warm, sustained string pad sounds with 3-layer ensemble detuning per voice
+- Supports full chord playing and complex harmonies
 
 ## Control Methods
 
@@ -48,11 +49,13 @@ Connect a MIDI controller or DAW for real-time parameter control:
   - Values 65-127 = positive detune
 - **CC 27**: LFO Depth (0-127) - Amount of filter modulation (0 = no LFO effect, 127 = maximum sweep)
 
-#### String Pad Synthesizer Controls (Channel 1)
-- **CC 41**: String Pad Volume (0-127) - Controls string pad synthesizer level
-- **CC 42**: String Pad Filter Cutoff (0-127) - Filter brightness (200-2000 Hz range)
-- **CC 43**: String Pad Filter Resonance (0-127) - Filter resonance amount
-- **CC 44**: String Pad Detune Amount (0-127) - Ensemble detuning (0-15 cents range)
+#### String Pad Synthesizer Controls (Channel 1) - 6-Voice Polyphonic
+- **CC 41**: String Pad Volume (0-127) - Controls overall string pad level
+- **CC 42**: String Pad Filter Cutoff (0-127) - Filter brightness for all voices (200-2000 Hz range) 
+- **CC 43**: String Pad Filter Resonance (0-127) - Filter resonance for all voices
+- **CC 44**: String Pad Detune Amount (0-127) - Ensemble detuning for all voices (0-15 cents range)
+
+*Note: All string pad parameter changes affect all 6 active voices simultaneously for real-time performance control.*
 
 #### Global Controls (Channel 1)
 - **Pitch Bend**: Pitch bend wheel affects all active voices
@@ -63,9 +66,16 @@ Connect a MIDI controller or DAW for real-time parameter control:
 - **MIDI Channel 1**: All note input
 - **Note Range**: Full 88-key piano range supported (A0-C8)
 - **Velocity Sensitive**: All synthesizers respond to note velocity
-- **Polyphonic**: 
-  - Strings: Up to 8 simultaneous notes
-  - Drone: Up to 6 simultaneous notes
+- **Polyphonic Voice Limits**: 
+  - **Plucked Strings**: Up to 8 simultaneous notes
+  - **Drone**: Up to 6 simultaneous notes  
+  - **String Pads**: Up to 6 simultaneous notes with intelligent voice allocation
+
+### String Pad Polyphonic Behavior
+- **Voice Allocation**: New notes automatically find available voices
+- **Voice Stealing**: When all 6 voices are playing, the oldest note is smoothly replaced
+- **Note Tracking**: Each MIDI note is tracked individually for proper note-off behavior
+- **Chord Playing**: Full support for 6-note chords and complex harmonies
 
 
 ## Default Synth Parameters

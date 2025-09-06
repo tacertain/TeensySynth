@@ -195,8 +195,8 @@ public:
                 drone.noteOff(key);
                 break;
             case STRING_PADS:
-                // Single voice - just stop it
-                stringPad.noteOff();
+                // Use polyphonic note off
+                stringPad.noteOff(key);
                 break;
         }
     }

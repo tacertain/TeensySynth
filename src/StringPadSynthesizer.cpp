@@ -10,6 +10,7 @@ StringPadSynthesizer::StringVoice::StringVoice()
     , noteOnTime(0)
     , noteOffTime(0)
     , releasing(false)
+    , voiceId(-1)
     , currentGain(0.0f)
     , patchCord1(nullptr)
     , patchCord2(nullptr)
@@ -23,7 +24,8 @@ StringPadSynthesizer::StringVoice::~StringVoice() {
     cleanup();
 }
 
-void StringPadSynthesizer::StringVoice::initialize() {
+void StringPadSynthesizer::StringVoice::initialize(int id) {
+    voiceId = id;
     // Set up oscillator waveforms - all sawtooth for classic string sound
     osc1.begin(1.0, 440.0, WAVEFORM_SAWTOOTH);
     osc2.begin(1.0, 440.0, WAVEFORM_SAWTOOTH);
@@ -164,30 +166,114 @@ StringPadSynthesizer::StringPadSynthesizer()
     , releaseTime(1000.0f)      // 1000ms release
     , masterVolume(0.8f)        // 80% volume
 {
-    voice.initialize();
+    // Initialize all voices
+    for (int i = 0; i < MAX_VOICES; i++) {
+        voices[i].initialize(i);
+        voiceConnections[i * 2] = nullptr;     // Left connection
+        voiceConnections[i * 2 + 1] = nullptr; // Right connection
+    }
+    
+    // Set up voice mixing for polyphony
+    // Mixer 1: Voices 0-3 (4 inputs each)
+    voiceMixerL1.gain(0, 0.25f);  // Voice 0
+    voiceMixerL1.gain(1, 0.25f);  // Voice 1
+    voiceMixerL1.gain(2, 0.25f);  // Voice 2
+    voiceMixerL1.gain(3, 0.25f);  // Voice 3
+    
+    voiceMixerR1.gain(0, 0.25f);  // Voice 0
+    voiceMixerR1.gain(1, 0.25f);  // Voice 1
+    voiceMixerR1.gain(2, 0.25f);  // Voice 2
+    voiceMixerR1.gain(3, 0.25f);  // Voice 3
+    
+    // Mixer 2: Voices 4-5 + mix from mixer1 (3 inputs used)
+    voiceMixerL2.gain(0, 1.0f);   // Mix from voiceMixerL1
+    voiceMixerL2.gain(1, 0.25f);  // Voice 4
+    voiceMixerL2.gain(2, 0.25f);  // Voice 5
+    voiceMixerL2.gain(3, 0.0f);   // Unused
+    
+    voiceMixerR2.gain(0, 1.0f);   // Mix from voiceMixerR1
+    voiceMixerR2.gain(1, 0.25f);  // Voice 4
+    voiceMixerR2.gain(2, 0.25f);  // Voice 5
+    voiceMixerR2.gain(3, 0.0f);   // Unused
+    
+    // Connect voices to mixers
+    voiceConnections[0] = new AudioConnection(voices[0].envAmp, 0, voiceMixerL1, 0);  // Voice 0 -> L1
+    voiceConnections[1] = new AudioConnection(voices[0].envAmp, 0, voiceMixerR1, 0);  // Voice 0 -> R1
+    voiceConnections[2] = new AudioConnection(voices[1].envAmp, 0, voiceMixerL1, 1);  // Voice 1 -> L1
+    voiceConnections[3] = new AudioConnection(voices[1].envAmp, 0, voiceMixerR1, 1);  // Voice 1 -> R1
+    voiceConnections[4] = new AudioConnection(voices[2].envAmp, 0, voiceMixerL1, 2);  // Voice 2 -> L1
+    voiceConnections[5] = new AudioConnection(voices[2].envAmp, 0, voiceMixerR1, 2);  // Voice 2 -> R1
+    voiceConnections[6] = new AudioConnection(voices[3].envAmp, 0, voiceMixerL1, 3);  // Voice 3 -> L1
+    voiceConnections[7] = new AudioConnection(voices[3].envAmp, 0, voiceMixerR1, 3);  // Voice 3 -> R1
+    
+    voiceConnections[8] = new AudioConnection(voices[4].envAmp, 0, voiceMixerL2, 1);  // Voice 4 -> L2
+    voiceConnections[9] = new AudioConnection(voices[4].envAmp, 0, voiceMixerR2, 1);  // Voice 4 -> R2
+    voiceConnections[10] = new AudioConnection(voices[5].envAmp, 0, voiceMixerL2, 2); // Voice 5 -> L2
+    voiceConnections[11] = new AudioConnection(voices[5].envAmp, 0, voiceMixerR2, 2); // Voice 5 -> R2
+    
+    // Connect mixer1 to mixer2
+    new AudioConnection(voiceMixerL1, 0, voiceMixerL2, 0);
+    new AudioConnection(voiceMixerR1, 0, voiceMixerR2, 0);
 }
 
 StringPadSynthesizer::~StringPadSynthesizer() {
-    // Cleanup handled by voice destructor
+    // Clean up voice connections
+    for (int i = 0; i < MAX_VOICES * 2; i++) {
+        delete voiceConnections[i];
+    }
 }
 
 void StringPadSynthesizer::noteOn(int midiNote, float velocity) {
     if (velocity <= 0.0f || velocity > 1.0f) {
-        noteOff();
         return;
     }
     
-    float frequency = midiNoteToFrequency(midiNote);
-    voice.startNote(midiNote, frequency, velocity);
-    updateVoiceParameters();
+    // Check if this note is already playing
+    int existingVoice = findVoicePlayingNote(midiNote);
+    if (existingVoice >= 0) {
+        // Retrigger existing note
+        voices[existingVoice].stopNote();
+    }
+    
+    // Find an available voice
+    int voiceIndex = findAvailableVoice();
+    if (voiceIndex < 0) {
+        // No available voices, steal the oldest one
+        voiceIndex = findOldestVoice();
+    }
+    
+    if (voiceIndex >= 0) {
+        float frequency = midiNoteToFrequency(midiNote);
+        voices[voiceIndex].startNote(midiNote, frequency, velocity);
+        voices[voiceIndex].updateOscillatorFrequencies(frequency, detuneAmount);
+        voices[voiceIndex].updateFilter(filterCutoff, filterResonance);
+    }
 }
 
-void StringPadSynthesizer::noteOff() {
-    voice.stopNote();
+void StringPadSynthesizer::noteOff(int midiNote) {
+    // Find the voice playing this note
+    int voiceIndex = findVoicePlayingNote(midiNote);
+    if (voiceIndex >= 0) {
+        voices[voiceIndex].stopNote();
+    }
 }
 
-bool StringPadSynthesizer::isActive() const {
-    return voice.active;
+void StringPadSynthesizer::allNotesOff() {
+    for (int i = 0; i < MAX_VOICES; i++) {
+        if (voices[i].active) {
+            voices[i].stopNote();
+        }
+    }
+}
+
+int StringPadSynthesizer::getActiveVoiceCount() const {
+    int count = 0;
+    for (int i = 0; i < MAX_VOICES; i++) {
+        if (voices[i].active) {
+            count++;
+        }
+    }
+    return count;
 }
 
 void StringPadSynthesizer::setFilterCutoff(float cutoff) {
@@ -228,11 +314,13 @@ void StringPadSynthesizer::setVolume(float volume) {
 }
 
 AudioStream* StringPadSynthesizer::getOutput() {
-    return &voice.envAmp;
+    return &voiceMixerL2;  // Final mixed output (we use left mixer for mono output)
 }
 
 void StringPadSynthesizer::processEnvelope() {
-    voice.updateEnvelope();
+    for (int i = 0; i < MAX_VOICES; i++) {
+        voices[i].updateEnvelope();
+    }
 }
 
 float StringPadSynthesizer::midiNoteToFrequency(int midiNote) {
@@ -253,11 +341,47 @@ float StringPadSynthesizer::mapDetuneToSemitones(float detune01) {
 }
 
 void StringPadSynthesizer::updateVoiceParameters() {
-    // Update filter settings
-    voice.updateFilter(filterCutoff, filterResonance);
-    
-    // Update oscillator frequencies with detuning
-    if (voice.active) {
-        voice.updateOscillatorFrequencies(voice.baseFrequency, detuneAmount);
+    updateAllVoiceParameters();
+}
+
+void StringPadSynthesizer::updateAllVoiceParameters() {
+    for (int i = 0; i < MAX_VOICES; i++) {
+        voices[i].updateFilter(filterCutoff, filterResonance);
+        if (voices[i].active) {
+            voices[i].updateOscillatorFrequencies(voices[i].baseFrequency, detuneAmount);
+        }
     }
+}
+
+// Voice allocation methods
+int StringPadSynthesizer::findAvailableVoice() {
+    for (int i = 0; i < MAX_VOICES; i++) {
+        if (!voices[i].active) {
+            return i;
+        }
+    }
+    return -1; // No available voices
+}
+
+int StringPadSynthesizer::findVoicePlayingNote(int midiNote) {
+    for (int i = 0; i < MAX_VOICES; i++) {
+        if (voices[i].active && voices[i].midiNote == midiNote) {
+            return i;
+        }
+    }
+    return -1; // Note not found
+}
+
+int StringPadSynthesizer::findOldestVoice() {
+    int oldestVoice = 0;
+    unsigned long oldestTime = voices[0].noteOnTime;
+    
+    for (int i = 1; i < MAX_VOICES; i++) {
+        if (voices[i].noteOnTime < oldestTime) {
+            oldestTime = voices[i].noteOnTime;
+            oldestVoice = i;
+        }
+    }
+    
+    return oldestVoice;
 }

@@ -4,24 +4,25 @@
 #include <AudioStream.h>
 
 /**
- * StringPadSynthesizer - Phase 1 Implementation
+ * StringPadSynthesizer - Phase 2 Implementation
  * 
  * Classic 80s string synthesizer designed to recreate the lush, ensemble
  * string pad sounds characteristic of instruments like the Korg Delta,
  * Roland Jupiter-6, and similar analog string synthesizers.
  * 
- * This Phase 1 implementation provides a single voice with 3-layer ensemble
- * for testing basic functionality and sound character.
+ * This Phase 2 implementation provides 6-voice polyphony with intelligent
+ * voice allocation, allowing full chord playing capabilities.
  */
 class StringPadSynthesizer {
 public:
     StringPadSynthesizer();
     ~StringPadSynthesizer();
 
-    // Single voice control (Phase 1)
+    // Polyphonic voice control (Phase 2)
     void noteOn(int midiNote, float velocity);
-    void noteOff();
-    bool isActive() const;
+    void noteOff(int midiNote);
+    void allNotesOff();
+    int getActiveVoiceCount() const;
     
     // Real-time parameter control
     void setFilterCutoff(float cutoff);     // 0.0 - 1.0 (maps to ~200-2000Hz)
@@ -43,7 +44,9 @@ public:
     void processEnvelope();
 
 private:
-    // Single voice with 3-layer ensemble
+    static const int MAX_VOICES = 6;    // 6-voice polyphony
+    
+    // Multi-voice with 3-layer ensemble per voice
     struct StringVoice {
         // Three ensemble layers with different detuning
         AudioSynthWaveform osc1;           // Center pitch
@@ -63,6 +66,7 @@ private:
         unsigned long noteOnTime;
         unsigned long noteOffTime;
         bool releasing;
+        int voiceId;                       // Voice identification for allocation
         
         // Envelope state
         float currentGain;
@@ -76,7 +80,7 @@ private:
         
         StringVoice();
         ~StringVoice();
-        void initialize();
+        void initialize(int id);
         void cleanup();
         void startNote(int note, float freq, float vel);
         void stopNote();
@@ -85,8 +89,15 @@ private:
         void updateFilter(float cutoff, float resonance);
     };
     
-    // Single voice for Phase 1
-    StringVoice voice;
+    // Voice array and mixing for polyphony
+    StringVoice voices[MAX_VOICES];
+    AudioMixer4 voiceMixerL1;          // Mix voices 0-3 (left channel)
+    AudioMixer4 voiceMixerL2;          // Mix voices 4-5 + final mix (left)
+    AudioMixer4 voiceMixerR1;          // Mix voices 0-3 (right channel)  
+    AudioMixer4 voiceMixerR2;          // Mix voices 4-5 + final mix (right)
+    
+    // Voice mixing connections
+    AudioConnection* voiceConnections[MAX_VOICES * 2]; // L and R for each voice
     
     // Global parameters
     float filterCutoff;        // 0.0 - 1.0
@@ -96,6 +107,12 @@ private:
     float attackTime;          // milliseconds
     float releaseTime;         // milliseconds
     float masterVolume;        // 0.0 - 1.0
+    
+    // Voice allocation system
+    int findAvailableVoice();
+    int findVoicePlayingNote(int midiNote);
+    int findOldestVoice();
+    void updateAllVoiceParameters();
     
     // Utility methods
     float midiNoteToFrequency(int midiNote);

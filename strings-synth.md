@@ -19,21 +19,29 @@ While the current project already has Karplus-Strong string synthesis (which pro
 - ✅ Authentic 80s string pad sound character achieved
 
 **Build Status:** ✅ Compiles successfully, no errors  
-**Memory Usage:** Flash: 136,640 bytes, RAM1: 210,496 bytes, RAM2: 171,744 bytes  
+**Memory Usage (Phase 1):** Flash: 136,640 bytes, RAM1: 210,496 bytes, RAM2: 171,744 bytes  
 **Audio Quality:** Clean, artifact-free audio with natural ensemble chorus effect
 
-### 🔄 Phase 2: PLANNED
-**Polyphonic Capabilities** - Next implementation phase
-- Voice allocation system for 6-voice polyphony
-- Polyphonic note on/off handling
-- Chord playing and voice management optimization
-- Enhanced envelope control with configurable attack/release times
+### ✅ Phase 2: COMPLETE  
+**Polyphonic Capabilities** - Successfully implemented with 6-voice polyphony
+- ✅ Voice allocation system with intelligent voice stealing (oldest voice priority)
+- ✅ Polyphonic note on/off handling with proper MIDI note tracking
+- ✅ Full chord playing capability - all 6 voices can play simultaneously
+- ✅ Voice mixing architecture combining all voices into single output
+- ✅ Real-time parameter updates affect all active voices
+- ✅ Backward compatible MIDI interface (same CC mappings)
 
-### 🔄 Phase 3-5: FUTURE
-**Ensemble Effects & Advanced Features** - Future enhancements
+**Build Status:** ✅ Compiles successfully, no errors  
+**Memory Usage (Phase 2):** Flash: 134,076 bytes, RAM1: 217,504 bytes, RAM2: 171,744 bytes  
+**Polyphonic Performance:** 6 simultaneous voices with full 3-layer ensemble per voice (18 oscillators total)
+
+### 🔄 Phase 3: FUTURE
+**Enhanced Features & Effects** - Future enhancements  
 - Chorus/ensemble effects for wider stereo imaging
+- Enhanced envelopes with exponential curves and configurable timing
 - Filter envelope modulation and string "swell" effects  
-- Performance optimizations and preset management
+- Preset system with classic 80s string pad sounds
+- Per-voice detuning variations for more natural ensemble
 
 ## Target Sound Characteristics
 The classic 80s string synthesizer sound has these key characteristics:
@@ -305,22 +313,27 @@ String Pad Synthesis (1 voice) → mixerL5, mixerR5    → sumL/R → I2S Output
 4. **MIDI Implementation**: Extended MIDI CC control for all parameters
 5. **Preset Management**: Save/load user presets to SD card with preset recall system
 
-## How to Use (Current Phase 1 Implementation)
+## How to Use (Phase 2 Implementation)
 
 1. **Upload the firmware** to your Teensy 4.1
 2. **Connect MIDI keyboard/controller** 
 3. **Switch to STRING_PADS mode** using MIDI CC 55 (value 127)
-4. **Play notes** to hear warm, ensemble string pad sounds
-5. **Adjust parameters in real-time**:
+4. **Play chords and melodies** - up to 6 simultaneous notes supported
+5. **Adjust parameters in real-time** (affects all active voices):
    - **CC 41**: String pad volume
    - **CC 42**: Filter cutoff (brightness)  
    - **CC 43**: Filter resonance (character)
    - **CC 44**: Detune amount (ensemble width)
 
-**Current Limitation**: Phase 1 is monophonic (single voice). Phase 2 will add 6-voice polyphony for chord playing.
+**Polyphonic Features:**
+- **6-voice polyphony** - play full chords and complex harmonies
+- **Intelligent voice allocation** - new notes automatically find available voices
+- **Voice stealing** - when all 6 voices are busy, oldest notes are smoothly replaced
+- **Per-note tracking** - each note can be individually released with proper note-off
+- **Real-time control** - all parameter changes instantly affect all playing voices
 
 ## Technical Implementation Files
-- **Core Implementation**: `src/StringPadSynthesizer.h/.cpp`
-- **Integration**: `src/HybridSynthesizer.h` (updated)
-- **Control Interface**: `src/main.cpp` (updated)
-- **Documentation**: `keyboard-controls.md` (updated with new CC mappings)
+- **Core Implementation**: `src/StringPadSynthesizer.h/.cpp` (Phase 2 polyphonic architecture)
+- **Integration**: `src/HybridSynthesizer.h` (updated for polyphonic note handling)
+- **Control Interface**: `src/main.cpp` (MIDI routing)
+- **Documentation**: `keyboard-controls.md` (CC mappings and mode switching)
