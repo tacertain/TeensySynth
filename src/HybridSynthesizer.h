@@ -11,7 +11,8 @@ public:
     enum SynthMode {
         PLUCKED_STRINGS,    // Karplus-Strong plucked strings (renamed from STRINGS_ONLY)
         DRONE,              // Analog-style drone synthesizer  
-        STRING_PADS         // Classic 80s string pads
+        STRING_PADS,        // Classic 80s string pads
+        SPLIT               // Split mode: drone below split point, string pads above
     };
 
 private:
@@ -52,7 +53,7 @@ private:
     float stringPadVolume = 1.0f;
     
     SynthMode currentMode = PLUCKED_STRINGS;  // Updated default mode
-    uint8_t splitPoint = 60; // Middle C
+    uint8_t splitPoint = 48; // C3 
 
 public:
     HybridSynthesizer() :
@@ -174,6 +175,14 @@ public:
                 // Use single voice for Phase 1
                 stringPad.noteOn(key, velocity);
                 break;
+            case SPLIT:
+                // Split mode: drone below split point, string pads above
+                if (key < splitPoint) {
+                    drone.noteOn(key, velocity);
+                } else {
+                    stringPad.noteOn(key, velocity);
+                }
+                break;
         }
     }
 
@@ -197,6 +206,14 @@ public:
             case STRING_PADS:
                 // Use polyphonic note off
                 stringPad.noteOff(key);
+                break;
+            case SPLIT:
+                // Split mode: drone below split point, string pads above
+                if (key < splitPoint) {
+                    drone.noteOff(key);
+                } else {
+                    stringPad.noteOff(key);
+                }
                 break;
         }
     }
@@ -274,6 +291,11 @@ private:
             case STRING_PADS:
                 stringGain = 0.0f;
                 droneGain = 0.0f;
+                stringPadGain = masterVolume * stringPadVolume;
+                break;
+            case SPLIT:
+                stringGain = 0.0f; // Plucked strings not used in split mode
+                droneGain = masterVolume * droneVolume;
                 stringPadGain = masterVolume * stringPadVolume;
                 break;
         }

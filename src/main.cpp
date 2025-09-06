@@ -17,11 +17,7 @@
  * TFT Display:
  * CS: 10
  * DC: 9
-     if (channel == 1 && control == 55 && value == 127) // CC 55 - String Pads
-    {
-        synth.setSynthMode(HybridSynthesizer::STRING_PADS);
-        Serial.println("Mode: STRING_PADS (CC 55)");
-    }/MOSI: 11
+ * SDI/MOSI: 11
  * SCK: 13
  * SDO/MISO: 12
  *
@@ -70,7 +66,7 @@ FramebufferGFX gfx(fb, 320, 240);
 
 void setup()
 {
-    while (!Serial);
+    //while (!Serial);
     myusb.begin();
     midi1.setHandleNoteOff(OnNoteOff);
     midi1.setHandleNoteOn(OnNoteOn);
@@ -307,10 +303,10 @@ void OnControlChange(byte channel, byte control, byte value)
         Serial.println("Mode: STRING_PADS + Shimmer preset (CC 57)");
     }
     
-    if (channel == 1 && control == 58 && value == 127) // CC 58 - Query USB Device Info
+    if (channel == 1 && control == 58 && value == 127) // CC 58 - Split Mode
     {
-        Serial.println("Querying USB device information...");
-        queryUSBDeviceInfo();
+        synth.setSynthMode(HybridSynthesizer::SPLIT);
+        Serial.println("Mode: SPLIT - Drone below C5, String Pads above (CC 58)");
     }
 }
 
