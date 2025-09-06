@@ -159,7 +159,7 @@ void OnNoteOn(byte channel, byte note, byte velocity)
     Serial.print(vel);
     Serial.print(")");
     Serial.println();
-    synth.noteOn(note, freq, vel);
+    synth.noteOn(note, freq, 1.0f);
 }
 
 void OnNoteOff(byte channel, byte note, byte velocity)

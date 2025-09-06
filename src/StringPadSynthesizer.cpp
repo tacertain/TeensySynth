@@ -149,8 +149,9 @@ void StringPadSynthesizer::StringVoice::updateEnvelope() {
         unsigned long attackTime = currentTime - noteOnTime;
         
         // Simple linear attack for now - could be improved with exponential curves
-        if (attackTime < 200) { // 200ms default attack
-            float attackProgress = (float)attackTime / 200.0f;
+        constexpr unsigned long ATTACK_TIME_MS = 100;
+        if (attackTime < ATTACK_TIME_MS) {
+            float attackProgress = (float)attackTime / (float)ATTACK_TIME_MS;
             currentGain = velocity * 0.6f * attackProgress; // 0.6 max gain for headroom
         } else {
             // Sustain phase

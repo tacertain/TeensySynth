@@ -173,7 +173,7 @@ public:
                 break;
             case STRING_PADS:
                 // Pass the current chord mode directly
-                stringPad.noteOn(key, velocity, stringPad.getChordMode());
+                stringPad.noteOn(key, velocity, StringPadSynthesizer::CHORD_MODE_OFF);
                 break;
             case SPLIT:
                 // Split mode: drone below split point, string pads above
@@ -215,7 +215,7 @@ public:
                 break;
             case STRING_PADS:
                 // Pass the current chord mode directly
-                stringPad.noteOff(key, stringPad.getChordMode());
+                stringPad.noteOff(key, StringPadSynthesizer::CHORD_MODE_OFF);
                 break;
             case SPLIT:
                 // Split mode: drone below split point, string pads above
