@@ -107,10 +107,13 @@ Create a new `DroneSynthesizer` class that utilizes Teensy Audio Library compone
 4. ✅ Update HybridSynthesizer to use MIDI note numbers instead of frequency
 
 #### Phase 3: Effects and Modulation (NEXT)
-1. Add proper filter components (AudioFilterStateVariable)
-2. Implement LFO modulation system for filter sweeps
-3. Add chorus and reverb effects
-4. Enhanced envelope generators with proper ADSR timing
+1. **Add proper filter components (AudioFilterStateVariable)** - Each voice will gain individual lowpass filtering capability, allowing for per-voice filter cutoff control and the characteristic analog warmth through frequency shaping. This enables the signature "swoosh" effect when combined with modulation.
+
+2. **Implement LFO modulation system for filter sweeps** - Adds the classic analog movement and life to the drone sound. The LFO will automatically sweep the filter cutoff frequency, creating the iconic breathing/pulsing effect heard in classic 80s analog pads and the signature sound from "I Ran".
+
+3. **Add chorus and reverb effects** - The chorus effect will create the wide, ensemble-like stereo image that makes the drone sound fuller and more spacious. Reverb will add ambient depth and the characteristic "floating" quality of classic analog pad sounds.
+
+4. **Enhanced envelope generators with proper ADSR timing** - Replaces the basic envelope with full ADSR control, allowing for the slow, smooth attack that makes drone pads swell in naturally, adjustable decay for shaping the initial brightness, precise sustain levels for consistent pad volume, and controllable release times for natural fade-outs when notes are released.
 
 #### Phase 4: Integration and Polish
 1. Add real-time parameter control mapping

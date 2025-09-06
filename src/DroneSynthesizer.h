@@ -62,12 +62,6 @@ private:
         // Envelope simulation
         AudioAmplifier envAmp;
         
-        // Audio connections for this voice
-        AudioConnection* patchCord1;       // osc1 to mixer
-        AudioConnection* patchCord2;       // osc2 to mixer  
-        AudioConnection* patchCord3;       // subOsc to mixer
-        AudioConnection* patchCord4;       // mixer to envelope
-        
         // Voice state
         bool active;
         int midiNote;
@@ -76,7 +70,13 @@ private:
         unsigned long noteOnTime;
         unsigned long noteOffTime;
         bool releasing;
-        
+
+        // Audio connections for this voice
+        AudioConnection *patchCord1; // osc1 to mixer
+        AudioConnection *patchCord2; // osc2 to mixer
+        AudioConnection *patchCord3; // subOsc to mixer
+        AudioConnection *patchCord4; // mixer to envelope
+
         DroneVoice();
         ~DroneVoice();
         void initialize();
