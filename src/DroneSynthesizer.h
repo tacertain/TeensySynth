@@ -4,24 +4,28 @@
 #include <AudioStream.h>
 
 /**
- * DroneSynthesizer - Phase 1 Implementation
+ * DroneSynthesizer - Phase 2 Implementation
  * 
- * Single-voice analog-style drone synthesizer designed to recreate
+ * Polyphonic analog-style drone synthesizer designed to recreate
  * the classic 1980s Korg MS-10 sound as heard in "I Ran" by Flock of Seagulls.
  * 
- * This implementation focuses on the core oscillator + filter chain
- * with basic envelope and modulation capabilities.
+ * This Phase 2 implementation adds polyphonic capability with voice allocation,
+ * supporting up to 6 simultaneous voices for chord pads and layered drones.
  */
 class DroneSynthesizer {
 public:
+    // Voice management constants
+    static const int MAX_VOICES = 6;
+    
     DroneSynthesizer();
     ~DroneSynthesizer();
 
-    // Note control
-    void noteOn(float frequency, float velocity);
-    void noteOff();
+    // Polyphonic note control
+    void noteOn(int midiNote, float velocity);
+    void noteOff(int midiNote);
+    void allNotesOff();
     
-    // Real-time parameter control
+    // Real-time parameter control (affects all voices)
     void setFilterCutoff(float cutoff);     // 0.0 - 1.0
     void setFilterResonance(float resonance); // 0.0 - 1.0
     void setLFORate(float rate);            // 0.1 - 10.0 Hz
@@ -29,7 +33,7 @@ public:
     void setOscillatorDetune(float detune); // -1.0 to +1.0 semitones
     void setPulseWidth(float width);        // 0.1 - 0.9
     
-    // Envelope parameters
+    // Envelope parameters (affects all voices)
     void setAttackTime(float attackMs);     // 10 - 2000 ms
     void setSustainLevel(float sustain);    // 0.0 - 1.0
     void setReleaseTime(float releaseMs);   // 10 - 5000 ms
@@ -40,43 +44,75 @@ public:
     // Audio outputs (stereo)
     AudioStream* getLeftOutput();
     AudioStream* getRightOutput();
+    
+    // Processing - call regularly to update envelopes
+    void processEnvelopes();
 
 private:
-    // Core oscillators
-    AudioSynthWaveform osc1;           // Main oscillator (sawtooth)
-    AudioSynthWaveform osc2;           // Second oscillator for detuning (pulse)
-    AudioSynthWaveform subOsc;         // Sub-oscillator (square, 1 octave down)
+    // Voice structure for polyphonic synthesis
+    struct DroneVoice {
+        // Core oscillators per voice
+        AudioSynthWaveform osc1;           // Main oscillator (sawtooth)
+        AudioSynthWaveform osc2;           // Second oscillator for detuning (pulse)
+        AudioSynthWaveform subOsc;         // Sub-oscillator (square, 1 octave down)
+        
+        // Voice mixing
+        AudioMixer4 oscMixer;
+        
+        // Envelope simulation
+        AudioAmplifier envAmp;
+        
+        // Audio connections for this voice
+        AudioConnection* patchCord1;       // osc1 to mixer
+        AudioConnection* patchCord2;       // osc2 to mixer  
+        AudioConnection* patchCord3;       // subOsc to mixer
+        AudioConnection* patchCord4;       // mixer to envelope
+        
+        // Voice state
+        bool active;
+        int midiNote;
+        float frequency;
+        float velocity;
+        unsigned long noteOnTime;
+        unsigned long noteOffTime;
+        bool releasing;
+        
+        DroneVoice();
+        ~DroneVoice();
+        void initialize();
+        void cleanup();
+        void startNote(int note, float freq, float vel);
+        void stopNote();
+        void updateEnvelope();
+    };
     
-    // LFO for modulation
-    AudioSynthWaveform lfo;
+    // Voice array
+    DroneVoice voices[MAX_VOICES];
     
-    // Mixing oscillators
-    AudioMixer4 oscMixer;
+    // Global LFO (shared across all voices)
+    AudioSynthWaveform globalLFO;
     
-    // Filter (using basic components available)
-    // Note: Will use available filter components
+    // Voice mixing and output
+    AudioMixer4 voiceMixerL1;              // Voices 0-3 left
+    AudioMixer4 voiceMixerL2;              // Voices 4-5 left (and unused channels)
+    AudioMixer4 voiceMixerR1;              // Voices 0-3 right
+    AudioMixer4 voiceMixerR2;              // Voices 4-5 right (and unused channels)
+    AudioMixer4 masterMixerL;              // Final left mix
+    AudioMixer4 masterMixerR;              // Final right mix
+    AudioAmplifier leftAmp;                // Final left output
+    AudioAmplifier rightAmp;               // Final right output
     
-    // Envelope generator (using basic components)
-    AudioAmplifier envAmp;                 // For envelope simulation
+    // Voice mixer connections
+    AudioConnection* voiceConnectionsL[MAX_VOICES];
+    AudioConnection* voiceConnectionsR[MAX_VOICES];
+    AudioConnection* mixerConnectionL1;
+    AudioConnection* mixerConnectionL2; 
+    AudioConnection* mixerConnectionR1;
+    AudioConnection* mixerConnectionR2;
+    AudioConnection* outputConnectionL;
+    AudioConnection* outputConnectionR;
     
-    // Output amplifiers for stereo
-    AudioAmplifier leftAmp;
-    AudioAmplifier rightAmp;
-    
-    // Audio connections
-    AudioConnection* patchCord1;           // osc1 to mixer
-    AudioConnection* patchCord2;           // osc2 to mixer
-    AudioConnection* patchCord3;           // subOsc to mixer
-    AudioConnection* patchCord4;           // mixer to envelope
-    AudioConnection* patchCord5;           // envelope to left amp
-    AudioConnection* patchCord6;           // envelope to right amp
-    
-    // Current state
-    bool playing;
-    float currentFrequency;
-    float currentVelocity;
-    
-    // Parameter storage
+    // Global parameters (shared by all voices)
     float filterCutoff;
     float filterResonance;
     float lfoRate;
@@ -88,9 +124,14 @@ private:
     float releaseTime;
     float masterVolume;
     
+    // Voice management methods
+    int findFreeVoice();
+    int findVoiceByNote(int midiNote);
+    int findOldestVoice();
+    void updateVoiceParameters(DroneVoice& voice);
+    float midiNoteToFrequency(int midiNote);
+    
     // Internal methods
-    void updateOscillatorFrequencies();
-    void updateFilter();
-    void startEnvelope();
-    void stopEnvelope();
+    void updateAllVoiceParameters();
+    void updateGlobalLFO();
 };

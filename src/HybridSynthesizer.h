@@ -130,6 +130,11 @@ public:
     // Drone-specific controls
     DroneSynthesizer& getDrone() { return drone; }
 
+    // Processing - call this regularly from main loop
+    void update() {
+        drone.processEnvelopes();
+    }
+
     void noteOn(int key, float freq, float velocity) {
         bool playStrings = false;
         bool playDrone = false;
@@ -159,7 +164,8 @@ public:
         }
         
         if (playDrone) {
-            drone.noteOn(freq, velocity);
+            // Convert key to MIDI note and use new polyphonic interface
+            drone.noteOn(key, velocity);
         }
     }
 
@@ -173,9 +179,9 @@ public:
             keyToBaseFreq.erase(key);
         }
         
-        // For drone mode, we use monophonic behavior (single voice)
+        // For drone mode, handle polyphonic note off
         if (currentMode == DRONE || currentMode == LAYERED || currentMode == SPLIT) {
-            drone.noteOff();
+            drone.noteOff(key);
         }
     }
 

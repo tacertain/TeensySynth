@@ -115,6 +115,10 @@ void loop()
 #endif
     myusb.Task();
     midi1.read();
+    
+    // Update synthesizer envelopes and other processing
+    synth.update();
+    
     // tft.overlayFPS(fb); // optional: draw the current FPS on the top right corner of the framebuffer
     if (gfx.updated())
     {
