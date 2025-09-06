@@ -4,7 +4,7 @@
 The TeensySynth is a polyphonic hybrid synthesizer running on a Teensy 4.1 microcontroller. It combines three distinct synthesis methods: Karplus-Strong plucked strings, analog-style drone synthesis, and classic 80s string pads.
 
 ## Synthesis Modes
-The synthesizer has three main modes:
+The synthesizer has four main modes:
 
 ### 1. **PLUCKED_STRINGS** Mode
 - Karplus-Strong string synthesizer for realistic plucked string sounds
@@ -21,6 +21,14 @@ The synthesizer has three main modes:
 - 6-voice polyphony with intelligent voice allocation (Phase 2)
 - Warm, sustained string pad sounds with 3-layer ensemble detuning per voice
 - Supports full chord playing and complex harmonies
+- **Three chord modes**: Off (single notes), Major (6-note chords), Octave (2-note octaves)
+
+### 4. **SPLIT** Mode ✅ **NEW**
+- **Hybrid mode** combining drone and string pad synthesizers
+- **Split point**: Middle C (MIDI note 60)
+- **Below Middle C**: Drone synthesizer (bass/pad sounds)
+- **Above Middle C+12**: String pad synthesizer (lead/melody sounds)
+- **Perfect for solo performance** with bass accompaniment and lead melodies
 
 ## Control Methods
 
@@ -61,6 +69,19 @@ Connect a MIDI controller or DAW for real-time parameter control:
 - **CC 42**: String Pad Filter Cutoff (0-127) - Filter brightness for all voices (200-2000 Hz range) 
 - **CC 43**: String Pad Filter Resonance (0-127) - Filter resonance for all voices
 - **CC 44**: String Pad Detune Amount (0-127) - Ensemble detuning for all voices (0-15 cents range)
+- **CC 45**: High-Pass Filter Multiplier (0-127) - Controls high-pass filtering per voice
+  - **Value 0**: Multiplier = 0.05 (minimal high-pass, more bass content)
+  - **Value 64**: Multiplier = 1.0 (default, 80% of fundamental frequency)
+  - **Value 127**: Multiplier = 4.0 (aggressive high-pass, tighter sound)
+  - **Uses exponential mapping** for smooth control across the range
+
+#### Mode and Chord Controls (Channel 1)
+- **CC 58** (value 127): Toggle **Split Mode** - Drone below Middle C, String Pads above Middle C+12
+- **CC 59** (value 127): Cycle **String Pad Chord Mode**:
+  - **First press**: Major Chord Mode (6-note major chords: root + 3rd + 5th across two octaves)
+  - **Second press**: Octave Mode (2-note: root + octave)
+  - **Third press**: Off (single notes only)
+  - **Cycles continuously** with each CC 59 trigger
 
 *Note: All string pad parameter changes affect all 6 active voices simultaneously for real-time performance control.*
 
@@ -144,6 +165,23 @@ You can override these defaults at any time using the MIDI CC controls:
 2. The split point is fixed at Middle C (note 60)
 3. Great for solo performances with accompaniment
 
+### For String Pad Chord Playing ✅ **NEW**
+1. Use **CC 59** to cycle through chord modes in String Pad mode:
+   - **Major Chord Mode**: Play full 6-note major chords (great for rich harmonies)
+   - **Octave Mode**: Play root note + octave (adds fullness without complexity)
+   - **Off Mode**: Traditional single-note playing
+2. Use **CC 45** to adjust bass content:
+   - **Low values (0-30)**: Fuller, warmer sound with more bass
+   - **Mid values (around 64)**: Balanced sound (default)
+   - **High values (90-127)**: Tighter, more focused sound
+
+### For Anti-Aliasing and Sound Shaping ✅ **NEW**
+1. **High-pass filtering** is now available per voice with **CC 45**
+2. **Final anti-aliasing filter** at 8kHz removes harsh high frequencies
+3. Adjust **CC 45** to taste:
+   - Higher values for cleaner, more defined sound
+   - Lower values for warmer, fuller sound with more low-frequency content
+
 ## Planned Future Features (Phase 3 - Steps 3-4)
 The following features are planned for the next update:
 
@@ -157,6 +195,10 @@ The following features are planned for the next update:
 - **Sample Rate**: 44.1 kHz
 - **Audio Memory**: Optimized for real-time performance
 - **CPU Usage**: Efficient processing leaves room for future expansion
+- **Anti-Aliasing**: Dual-stage filtering system ✅ **NEW**
+  - **Per-voice high-pass filters** remove sub-harmonic interference and control bass content
+  - **Final 8kHz low-pass filter** eliminates aliasing from sawtooth harmonics
+  - **Result**: Clean, professional sound quality across all note ranges
 
 ## Connection Setup
 1. **Audio Output**: Connect headphones or speakers to Teensy audio output

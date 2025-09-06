@@ -36,6 +36,7 @@ public:
     void setFilterResonance(float resonance); // 0.0 - 1.0
     void setChorusDepth(float depth);       // 0.0 - 1.0
     void setDetuneAmount(float detune);     // 0.0 - 1.0 (maps to ±0-15 cents)
+    void setHighpassMultiplier(float multiplier); // 0.05 - 4.0 (multiplier for highpass frequency)
     
     // Envelope parameters
     void setAttackTime(float attackMs);     // 50 - 2000 ms
@@ -80,6 +81,7 @@ private:
         // Voice mixing and processing
         AudioMixer4 ensembleMixer;         // Mix the 3 oscillators
         AudioFilterStateVariable filter;    // Lowpass filter
+        AudioFilterStateVariable highpassFilter; // Highpass filter at fundamental frequency
         AudioAmplifier envAmp;             // Envelope amplitude control
         
         // Voice state
@@ -99,8 +101,9 @@ private:
         AudioConnection *patchCord1; // osc1 to mixer
         AudioConnection *patchCord2; // osc2 to mixer  
         AudioConnection *patchCord3; // osc3 to mixer
-        AudioConnection *patchCord4; // mixer to filter
-        AudioConnection *patchCord5; // filter to envelope
+        AudioConnection *patchCord4; // mixer to lowpass filter
+        AudioConnection *patchCord5; // lowpass to highpass filter
+        AudioConnection *patchCord6; // highpass filter to envelope
         
         StringVoice();
         ~StringVoice();
@@ -111,6 +114,7 @@ private:
         void updateEnvelope();
         void updateOscillatorFrequencies(float baseFreq, float detuneAmount);
         void updateFilter(float cutoff, float resonance);
+        void updateHighpassFilter(float multiplier);
     };
     
     // Voice array and mixing for polyphony
@@ -119,6 +123,10 @@ private:
     AudioMixer4 voiceMixerL2;          // Mix voices 4-5 + final mix (left)
     AudioMixer4 voiceMixerR1;          // Mix voices 0-3 (right channel)  
     AudioMixer4 voiceMixerR2;          // Mix voices 4-5 + final mix (right)
+    
+    // Final anti-aliasing filter
+    AudioFilterStateVariable finalFilter;
+    AudioConnection* finalFilterConnection;
     
     // Voice mixing connections
     AudioConnection* voiceConnections[MAX_VOICES * 2]; // L and R for each voice
@@ -131,6 +139,7 @@ private:
     float attackTime;          // milliseconds
     float releaseTime;         // milliseconds
     float masterVolume;        // 0.0 - 1.0
+    float highpassMultiplier;  // Multiplier for highpass filter frequency (0.05 - 4.0)
     
     // Chord mode
     ChordMode chordMode;

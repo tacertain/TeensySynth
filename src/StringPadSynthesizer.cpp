@@ -66,6 +66,7 @@ StringPadSynthesizer::StringVoice::StringVoice()
     , patchCord3(nullptr)
     , patchCord4(nullptr)
     , patchCord5(nullptr)
+    , patchCord6(nullptr)
 {
 }
 
@@ -86,17 +87,23 @@ void StringPadSynthesizer::StringVoice::initialize(int id) {
     ensembleMixer.gain(2, 0.32f);  // osc3 (flat)
     ensembleMixer.gain(3, 0.0f);   // unused
     
-    // Initialize filter for warm string pad sound
+    // Initialize lowpass filter for warm string pad sound
     filter.frequency(800.0f);      // Warm initial cutoff
     filter.resonance(0.3f);        // Gentle resonance
     filter.octaveControl(7.0f);    // Full range control
     
-    // Create audio connections
+    // Initialize highpass filter to remove sub-harmonics and DC offset
+    highpassFilter.frequency(80.0f);   // Default frequency, will be updated per note
+    highpassFilter.resonance(0.7f);    // Minimal resonance for clean filtering
+    highpassFilter.octaveControl(7.0f); // Full range control
+    
+    // Create audio connections: oscillators -> mixer -> lowpass -> highpass -> envelope
     patchCord1 = new AudioConnection(osc1, 0, ensembleMixer, 0);
     patchCord2 = new AudioConnection(osc2, 0, ensembleMixer, 1);
     patchCord3 = new AudioConnection(osc3, 0, ensembleMixer, 2);
     patchCord4 = new AudioConnection(ensembleMixer, 0, filter, 0);
-    patchCord5 = new AudioConnection(filter, 0, envAmp, 0);
+    patchCord5 = new AudioConnection(filter, 0, highpassFilter, 0);
+    patchCord6 = new AudioConnection(highpassFilter, 2, envAmp, 0);
     
     // Initialize envelope amplifier
     envAmp.gain(0.0f);
@@ -110,7 +117,8 @@ void StringPadSynthesizer::StringVoice::cleanup() {
     delete patchCord3;
     delete patchCord4;
     delete patchCord5;
-    patchCord1 = patchCord2 = patchCord3 = patchCord4 = patchCord5 = nullptr;
+    delete patchCord6;
+    patchCord1 = patchCord2 = patchCord3 = patchCord4 = patchCord5 = patchCord6 = nullptr;
 }
 
 void StringPadSynthesizer::StringVoice::startNote(int note, float freq, float vel) {
@@ -127,6 +135,11 @@ void StringPadSynthesizer::StringVoice::startNote(int note, float freq, float ve
     osc1.frequency(baseFrequency);
     osc2.frequency(baseFrequency);
     osc3.frequency(baseFrequency);
+
+    // Set highpass filter - will be updated with current multiplier by parent class
+    float highpassFreq = baseFrequency * 0.8f;
+    if (highpassFreq < 40.0f) highpassFreq = 40.0f;
+    highpassFilter.frequency(highpassFreq);
     
     // Start with zero gain - envelope will ramp up
     envAmp.gain(0.0f);
@@ -207,6 +220,21 @@ void StringPadSynthesizer::StringVoice::updateFilter(float cutoff, float resonan
     filter.resonance(resonance * 4.0f); // Scale for reasonable resonance range
 }
 
+void StringPadSynthesizer::StringVoice::updateHighpassFilter(float multiplier) {
+    if (!active || baseFrequency <= 0.0f) return;
+    
+    // Calculate highpass frequency: base frequency * 0.8 * multiplier
+    float highpassFreq = baseFrequency * 0.8f * multiplier;
+    
+    // Ensure minimum frequency to avoid very low frequency rumble
+    if (highpassFreq < 40.0f) highpassFreq = 40.0f;
+    
+    // Ensure maximum frequency doesn't go too high
+    if (highpassFreq > 8000.0f) highpassFreq = 8000.0f;
+    
+    highpassFilter.frequency(highpassFreq);
+}
+
 // StringPadSynthesizer implementation
 StringPadSynthesizer::StringPadSynthesizer()
     : filterCutoff(0.4f)        // Start with warm sound
@@ -216,6 +244,7 @@ StringPadSynthesizer::StringPadSynthesizer()
     , attackTime(200.0f)        // 200ms attack
     , releaseTime(1000.0f)      // 1000ms release
     , masterVolume(0.8f)        // 80% volume
+    , highpassMultiplier(1.0f)  // Default highpass multiplier (CC 64 = 1.0)
     , chordMode(CHORD_MODE_MAJOR)  // Default to chord mode
     , currentPreset(PRESET_BRIGHT_STRINGS)  // Default to bright strings preset
 {
@@ -267,6 +296,14 @@ StringPadSynthesizer::StringPadSynthesizer()
     // Connect mixer1 to mixer2
     new AudioConnection(voiceMixerL1, 0, voiceMixerL2, 0);
     new AudioConnection(voiceMixerR1, 0, voiceMixerR2, 0);
+    
+    // Add final anti-aliasing filter after voice mixing
+    finalFilterConnection = new AudioConnection(voiceMixerL2, 0, finalFilter, 0);
+    
+    // Set up final filter to remove high frequencies that could alias
+    finalFilter.frequency(8000.0f);    // Low-pass at 8kHz to prevent aliasing
+    finalFilter.resonance(0.7f);       // Minimal resonance for clean filtering
+    finalFilter.octaveControl(7.0f);   // Full range control
 }
 
 StringPadSynthesizer::~StringPadSynthesizer() {
@@ -274,6 +311,8 @@ StringPadSynthesizer::~StringPadSynthesizer() {
     for (int i = 0; i < MAX_VOICES * 2; i++) {
         delete voiceConnections[i];
     }
+    // Clean up final filter connection
+    delete finalFilterConnection;
 }
 
 void StringPadSynthesizer::noteOn(int midiNote, float velocity, ChordMode chordMode) {
@@ -311,6 +350,7 @@ void StringPadSynthesizer::noteOn(int midiNote, float velocity, ChordMode chordM
                 voices[voiceIndex].startNote(midiNote, frequency, velocity);
                 voices[voiceIndex].updateOscillatorFrequencies(frequency, detuneAmount);
                 voices[voiceIndex].updateFilter(filterCutoff, filterResonance);
+                voices[voiceIndex].updateHighpassFilter(highpassMultiplier);
             }
             break;
     }
@@ -375,6 +415,11 @@ void StringPadSynthesizer::setDetuneAmount(float detune) {
     updateVoiceParameters();
 }
 
+void StringPadSynthesizer::setHighpassMultiplier(float multiplier) {
+    highpassMultiplier = constrain(multiplier, 0.05f, 4.0f);
+    updateVoiceParameters();
+}
+
 void StringPadSynthesizer::setAttackTime(float attackMs) {
     attackTime = constrain(attackMs, 50.0f, 2000.0f);
     // Note: Currently using hardcoded attack time in envelope
@@ -393,7 +438,7 @@ void StringPadSynthesizer::setVolume(float volume) {
 }
 
 AudioStream* StringPadSynthesizer::getOutput() {
-    return &voiceMixerL2;  // Final mixed output (we use left mixer for mono output)
+    return &finalFilter;  // Return filtered output to prevent aliasing
 }
 
 void StringPadSynthesizer::processEnvelope() {
@@ -426,6 +471,7 @@ void StringPadSynthesizer::updateVoiceParameters() {
 void StringPadSynthesizer::updateAllVoiceParameters() {
     for (int i = 0; i < MAX_VOICES; i++) {
         voices[i].updateFilter(filterCutoff, filterResonance);
+        voices[i].updateHighpassFilter(highpassMultiplier);
         if (voices[i].active) {
             voices[i].updateOscillatorFrequencies(voices[i].baseFrequency, detuneAmount);
         }
@@ -535,9 +581,10 @@ void StringPadSynthesizer::playMajorChord(int rootNote, float velocity) {
         
         if (voiceIndex >= 0) {
             float frequency = midiNoteToFrequency(chordNotes[i]);
-            voices[voiceIndex].startNote(chordNotes[i], frequency, velocity);
+            voices[voiceIndex].startNote(chordNotes[i], frequency, velocity / ((i < 3) ? 2.0f : 1.0f));
             voices[voiceIndex].updateOscillatorFrequencies(frequency, detuneAmount);
             voices[voiceIndex].updateFilter(filterCutoff, filterResonance);
+            voices[voiceIndex].updateHighpassFilter(highpassMultiplier);
         }
     }
 }
@@ -591,6 +638,7 @@ void StringPadSynthesizer::playOctaveNote(int rootNote, float velocity) {
             voices[voiceIndex].startNote(octaveNotes[i], frequency, velocity);
             voices[voiceIndex].updateOscillatorFrequencies(frequency, detuneAmount);
             voices[voiceIndex].updateFilter(filterCutoff, filterResonance);
+            voices[voiceIndex].updateHighpassFilter(highpassMultiplier);
         }
     }
 }

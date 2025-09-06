@@ -189,7 +189,7 @@ public:
                     {
                         chordMode = StringPadSynthesizer::CHORD_MODE_OCTAVE;
                     }
-                    key += 12;
+                    key += 24;
                     stringPad.noteOn(key, velocity, chordMode);
                 }
                 break;
@@ -230,7 +230,7 @@ public:
                     else if (key == 60) {
                         chordMode = StringPadSynthesizer::CHORD_MODE_OCTAVE;
                     }
-                    key += 12;
+                    key += 24;
                     stringPad.noteOff(key, chordMode);
                 }
                 break;

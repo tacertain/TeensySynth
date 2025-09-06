@@ -159,7 +159,7 @@ void OnNoteOn(byte channel, byte note, byte velocity)
     Serial.print(vel);
     Serial.print(")");
     Serial.println();
-    synth.noteOn(note, freq, 1.0f);
+    synth.noteOn(note, freq, vel);
 }
 
 void OnNoteOff(byte channel, byte note, byte velocity)
@@ -326,6 +326,30 @@ void OnControlChange(byte channel, byte control, byte value)
                 Serial.println("String Pad Chord Mode: OFF - Playing single notes (CC 59)");
                 break;
         }
+    }
+    
+    if (channel == 1 && control == 45) // CC 45 - Highpass Filter Multiplier
+    {
+        // Exponential mapping: CC 0 -> 0.05, CC 64 -> 1.0, CC 127 -> 4.0
+        float normalizedValue = (float)value / 127.0f;  // 0.0 to 1.0
+        float multiplier;
+        
+        if (value <= 64) {
+            // CC 0-64: map from 0.05 to 1.0 exponentially
+            float t = (float)value / 64.0f;  // 0.0 to 1.0
+            multiplier = 0.05f * pow(20.0f, t);  // 0.05 * (20^t) gives 0.05 to 1.0
+        } else {
+            // CC 65-127: map from 1.0 to 4.0 exponentially  
+            float t = (float)(value - 64) / 63.0f;  // 0.0 to 1.0
+            multiplier = 1.0f * pow(4.0f, t);  // 1.0 * (4^t) gives 1.0 to 4.0
+        }
+        
+        synth.getStringPad().setHighpassMultiplier(multiplier);
+        Serial.print("Highpass Multiplier: ");
+        Serial.print(multiplier, 3);
+        Serial.print(" (CC 45 = ");
+        Serial.print(value);
+        Serial.println(")");
     }
 }
 
