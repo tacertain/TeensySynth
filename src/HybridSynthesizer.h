@@ -5,6 +5,7 @@
 #include "karplus_strong_string_synth.h"
 #include "DroneSynthesizer.h"
 #include "StringPadSynthesizer.h"
+#include "AudioPeakMonitor.h"
 
 class HybridSynthesizer {
 public:
@@ -31,6 +32,7 @@ private:
     AudioMixer4 mixerL4, mixerR4;  // Drone mixers
     AudioMixer4 mixerL5, mixerR5;  // String pad mixers
     AudioMixer4 sumL, sumR;
+    AudioPeakMonitor peakMonitorL, peakMonitorR;  // Peak monitors for left and right channels
     AudioOutputI2S i2s1;
     
     // Audio connections
@@ -41,6 +43,7 @@ private:
     AudioConnection* stringPadPatchCordR;  // String pad to mixer
     AudioConnection* patchCordSumL1, *patchCordSumL2, *patchCordSumL4, *patchCordSumL5;
     AudioConnection* patchCordSumR1, *patchCordSumR2, *patchCordSumR4, *patchCordSumR5;
+    AudioConnection* patchCordMonitorL, *patchCordMonitorR;  // Connections to peak monitors
     AudioConnection* patchCordL;
     AudioConnection* patchCordR;
 
@@ -63,6 +66,7 @@ public:
         stringPadPatchCordR(nullptr),
         patchCordSumL1(nullptr), patchCordSumL2(nullptr), patchCordSumL4(nullptr), patchCordSumL5(nullptr),
         patchCordSumR1(nullptr), patchCordSumR2(nullptr), patchCordSumR4(nullptr), patchCordSumR5(nullptr),
+        patchCordMonitorL(nullptr), patchCordMonitorR(nullptr),
         patchCordL(nullptr),
         patchCordR(nullptr)
     {
@@ -100,7 +104,11 @@ public:
         // Set initial mixer gains
         updateMixerGains();
         
-        // Final output to I2S
+        // Connect sum outputs to peak monitors
+        patchCordMonitorL = new AudioConnection(sumL, 0, peakMonitorL, 0);
+        patchCordMonitorR = new AudioConnection(sumR, 0, peakMonitorR, 0);
+        
+        // Final output to I2S (through peak monitors)
         patchCordL = new AudioConnection(sumL, 0, i2s1, 0);
         patchCordR = new AudioConnection(sumR, 0, i2s1, 1);
     }
@@ -119,14 +127,29 @@ public:
         delete patchCordSumR2;
         delete patchCordSumR4;
         delete patchCordSumR5;
+        delete patchCordMonitorL;
+        delete patchCordMonitorR;
         delete patchCordL;
         delete patchCordR;
     }
     
     // Synthesis mode control
     void setSynthMode(SynthMode mode) { 
+        // Print current peak levels before switching modes
+        const char* modeNames[] = {"PLUCKED_STRINGS", "DRONE", "STRING_PADS", "SPLIT"};
+        const char* currentModeName = (currentMode >= 0 && currentMode < 4) ? modeNames[currentMode] : "UNKNOWN";
+        const char* newModeName = (mode >= 0 && mode < 4) ? modeNames[mode] : "UNKNOWN";
+        
+        Serial.print("Switching from ");
+        Serial.print(currentModeName);
+        Serial.print(" to ");
+        Serial.print(newModeName);
+        Serial.print(" - ");
+        printPeakLevels();
+        
         currentMode = mode; 
         updateMixerGains();
+        resetPeakMonitors(); // Reset peak monitors when mode changes
     }
     
     void setSplitPoint(uint8_t note) { splitPoint = note; }
@@ -267,6 +290,28 @@ public:
     KarplusStrongStringSynth& getString(int index) { 
         if (index >= 0 && index < 8) return strings[index];
         return strings[0]; // Return first string as fallback
+    }
+    
+    // Peak monitoring methods
+    int16_t getOutputMinL() const { return peakMonitorL.getMin(); }
+    int16_t getOutputMaxL() const { return peakMonitorL.getMax(); }
+    int16_t getOutputMinR() const { return peakMonitorR.getMin(); }
+    int16_t getOutputMaxR() const { return peakMonitorR.getMax(); }
+    
+    void resetPeakMonitors() {
+        peakMonitorL.reset();
+        peakMonitorR.reset();
+    }
+    
+    void printPeakLevels() const {
+        Serial.print("Peak Levels - L: min=");
+        Serial.print(peakMonitorL.getMin());
+        Serial.print(", max=");
+        Serial.print(peakMonitorL.getMax());
+        Serial.print(" | R: min=");
+        Serial.print(peakMonitorR.getMin());
+        Serial.print(", max=");
+        Serial.println(peakMonitorR.getMax());
     }
 
 private:
