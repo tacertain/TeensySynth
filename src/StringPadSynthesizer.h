@@ -113,7 +113,7 @@ private:
         void cleanup();
         void startNote(int note, float freq, float vel);
         void stopNote();
-        void updateEnvelope();
+        void updateEnvelope(float masterVol);
         void updateEnvelopeParameters(float attackMs, float releaseMs);
         void updateOscillatorFrequencies(float baseFreq, float detuneAmount);
         void updateFilter(float cutoff, float resonance);

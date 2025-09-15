@@ -105,7 +105,7 @@ public:
         updateMixerGains();
         
         // Connect sum outputs to peak monitors
-        patchCordMonitorL = new AudioConnection(sumL, 0, peakMonitorL, 0);
+        patchCordMonitorL = new AudioConnection(*drone.getLeftOutput(), 0, peakMonitorL, 0);
         patchCordMonitorR = new AudioConnection(sumR, 0, peakMonitorR, 0);
         
         // Final output to I2S (through peak monitors)
@@ -166,13 +166,11 @@ public:
     }
     
     void setDroneVolume(float volume) {
-        droneVolume = volume;
-        updateMixerGains();
+        drone.setVolume(volume);
     }
     
     void setStringPadVolume(float volume) {
-        stringPadVolume = volume;
-        updateMixerGains();
+        stringPad.setVolume(volume);
     }
     
     // Synthesizer access

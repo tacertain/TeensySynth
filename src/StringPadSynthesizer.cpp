@@ -82,7 +82,7 @@ void StringPadSynthesizer::StringVoice::initialize(int id) {
     osc1.begin(1.0, 440.0, WAVEFORM_SAWTOOTH);
     osc2.begin(1.0, 440.0, WAVEFORM_SAWTOOTH);
     osc3.begin(1.0, 440.0, WAVEFORM_SAWTOOTH);
-    
+
     // Set ensemble mixer gains for balanced ensemble sound
     ensembleMixer.gain(0, 0.35f);  // osc1 (center)
     ensembleMixer.gain(1, 0.33f);  // osc2 (sharp)
@@ -154,7 +154,7 @@ void StringPadSynthesizer::StringVoice::stopNote() {
     }
 }
 
-void StringPadSynthesizer::StringVoice::updateEnvelope() {
+void StringPadSynthesizer::StringVoice::updateEnvelope(float masterVol) {
     if (!active) return;
     
     unsigned long currentTime = millis();
@@ -166,10 +166,10 @@ void StringPadSynthesizer::StringVoice::updateEnvelope() {
         // Use configurable attack time instead of hardcoded value
         if (attackTime < (unsigned long)attackTimeMs) {
             float attackProgress = (float)attackTime / attackTimeMs;
-            currentGain = velocity * 0.6f * attackProgress; // 0.6 max gain for headroom
+            currentGain = velocity * masterVol * attackProgress;
         } else {
             // Sustain phase
-            currentGain = velocity * 0.6f;
+            currentGain = velocity * masterVol;
         }
         
         envAmp.gain(currentGain);
@@ -185,7 +185,7 @@ void StringPadSynthesizer::StringVoice::updateEnvelope() {
         // Use configurable release time instead of hardcoded value
         if (releaseTime < (unsigned long)releaseTimeMs) {
             float releaseProgress = (float)releaseTime / releaseTimeMs;
-            currentGain = velocity * 0.6f * (1.0f - releaseProgress);
+            currentGain = velocity * masterVol * (1.0f - releaseProgress);
             envAmp.gain(currentGain);
         } else {
             // Note finished
@@ -248,7 +248,7 @@ StringPadSynthesizer::StringPadSynthesizer()
     , detuneAmount(0.6f)        // Medium detuning for ensemble effect
     , attackTime(200.0f)        // 200ms attack
     , releaseTime(1000.0f)      // 1000ms release
-    , masterVolume(0.8f)        // 80% volume
+    , masterVolume(1.0f)        // 100% volume
     , highpassMultiplier(1.0f)  // Default highpass multiplier (CC 64 = 1.0)
     , chordMode(CHORD_MODE_MAJOR)  // Default to chord mode
     , currentPreset(PRESET_BRIGHT_STRINGS)  // Default to bright strings preset
@@ -262,25 +262,25 @@ StringPadSynthesizer::StringPadSynthesizer()
     
     // Set up voice mixing for polyphony
     // Mixer 1: Voices 0-3 (4 inputs each)
-    voiceMixerL1.gain(0, 0.25f);  // Voice 0
-    voiceMixerL1.gain(1, 0.25f);  // Voice 1
-    voiceMixerL1.gain(2, 0.25f);  // Voice 2
-    voiceMixerL1.gain(3, 0.25f);  // Voice 3
+    voiceMixerL1.gain(0, 0.5);  // Voice 0
+    voiceMixerL1.gain(1, 0.5f);  // Voice 1
+    voiceMixerL1.gain(2, 0.5f);  // Voice 2
+    voiceMixerL1.gain(3, 0.5f);  // Voice 3
     
-    voiceMixerR1.gain(0, 0.25f);  // Voice 0
-    voiceMixerR1.gain(1, 0.25f);  // Voice 1
-    voiceMixerR1.gain(2, 0.25f);  // Voice 2
-    voiceMixerR1.gain(3, 0.25f);  // Voice 3
+    voiceMixerR1.gain(0, 0.5f);  // Voice 0
+    voiceMixerR1.gain(1, 0.5f);  // Voice 1
+    voiceMixerR1.gain(2, 0.5f);  // Voice 2
+    voiceMixerR1.gain(3, 0.5f);  // Voice 3
     
     // Mixer 2: Voices 4-5 + mix from mixer1 (3 inputs used)
     voiceMixerL2.gain(0, 1.0f);   // Mix from voiceMixerL1
-    voiceMixerL2.gain(1, 0.25f);  // Voice 4
-    voiceMixerL2.gain(2, 0.25f);  // Voice 5
+    voiceMixerL2.gain(1, 0.5f);  // Voice 4
+    voiceMixerL2.gain(2, 0.5f);  // Voice 5
     voiceMixerL2.gain(3, 0.0f);   // Unused
     
     voiceMixerR2.gain(0, 1.0f);   // Mix from voiceMixerR1
-    voiceMixerR2.gain(1, 0.25f);  // Voice 4
-    voiceMixerR2.gain(2, 0.25f);  // Voice 5
+    voiceMixerR2.gain(1, 0.5f);  // Voice 4
+    voiceMixerR2.gain(2, 0.5f);  // Voice 5
     voiceMixerR2.gain(3, 0.0f);   // Unused
     
     // Connect voices to mixers
@@ -451,7 +451,7 @@ AudioStream* StringPadSynthesizer::getOutput() {
 
 void StringPadSynthesizer::processEnvelope() {
     for (int i = 0; i < MAX_VOICES; i++) {
-        voices[i].updateEnvelope();
+        voices[i].updateEnvelope(masterVolume);
     }
 }
 

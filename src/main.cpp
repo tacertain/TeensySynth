@@ -193,7 +193,8 @@ void OnControlChange(byte channel, byte control, byte value)
 
     if (channel == 1 && control == 7)
     {
-        synth.setMasterVolume((float)value / 127.0f); // Updated method name
+        synth.setMasterVolume((float)value / 64.0f); // Updated method name
+        Serial.printf("Master volume: %.2f\n", (float)value / 64.0f);
     }
 
     // Drone-specific controls

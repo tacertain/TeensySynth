@@ -13,8 +13,8 @@ void AudioPeakMonitor::update(void) {
         if (block->data[i] < localMin) localMin = block->data[i];
         if (block->data[i] > localMax) localMax = block->data[i];
     }
-    minVal = localMin;
-    maxVal = localMax;
+    minVal = min(minVal, localMin);
+    maxVal = max(maxVal, localMax);
     // Optionally: print or store values here
     release(block);
 }
