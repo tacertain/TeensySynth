@@ -41,7 +41,10 @@ public:
     AudioStream* getLeftOutput();
     AudioStream* getRightOutput();
     
-    // Processing - call regularly to update envelopes
+    // Direct access to internal components for monitoring
+    AudioStream* getOscMixer();  // Get reference to oscillator mixer for monitoring
+    
+    // Processing - call regularly to update envelopes and LFO
     void processEnvelopes();
 
 private:

@@ -212,14 +212,23 @@ void OnControlChange(byte channel, byte control, byte value)
 
     if (channel == 1 && control == 25) // CC 25 - LFO Rate
     {
-        float lfoRate = 0.1f + ((float)value / 127.0f) * 9.9f; // 0.1 to 10 Hz
+        float lfoRate;
+        if (value == 0) {
+            lfoRate = 0.0f; // Disable LFO when value is 0
+        } else {
+            lfoRate = ((float)value / 127.0f) * 10.0f; // 0 to 10 Hz
+        }
         synth.getDrone().setLFORate(lfoRate);
-        Serial.printf("LFO rate: %.2f Hz\n", lfoRate);
+        if (lfoRate == 0.0f) {
+            Serial.println("LFO disabled");
+        } else {
+            Serial.printf("LFO rate: %.2f Hz\n", lfoRate);
+        }
     }
 
     if (channel == 1 && control == 26) // CC 26 - Oscillator Detune
     {
-        float detune = ((float)value / 127.0f - 0.5f) * 2.0f; // -1.0 to +1.0
+        float detune = ((float)value / 128.0f - 0.5f) * 2.0f; // -1.0 to +1.0
         synth.getDrone().setOscillatorDetune(detune);
         Serial.printf("Oscillator detune: %.3f semitones\n", detune);
     }

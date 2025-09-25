@@ -24,9 +24,9 @@ DroneSynthesizer::DroneVoice::~DroneVoice() {
 
 void DroneSynthesizer::DroneVoice::initialize() {
     // Set up oscillator waveforms
-    osc1.begin(1.0, 440.0, 1);   // sawtooth
-    osc2.begin(1.0, 440.0, 2);   // pulse wave
-    subOsc.begin(1.0, 220.0, 3); // square wave
+    osc1.begin(1.0, 440.0, WAVEFORM_SAWTOOTH);   // sawtooth
+    osc2.begin(1.0, 440.0, WAVEFORM_SQUARE);   // pulse wave
+    subOsc.begin(1.0, 220.0, WAVEFORM_TRIANGLE); // square wave
     
     // Set oscillator mixer gains
     oscMixer.gain(0, 0.4f);  // osc1 (sawtooth)
@@ -34,7 +34,7 @@ void DroneSynthesizer::DroneVoice::initialize() {
     oscMixer.gain(2, 0.2f);  // subOsc (square, lower level)
     oscMixer.gain(3, 0.0f);  // unused
     
-    // Initialize filter (Phase 3 Step 1)
+    // Initialize filter
     filter.frequency(1000.0f);    // Default cutoff frequency
     filter.resonance(0.7f);       // Default resonance
     filter.octaveControl(7.0f);   // Full range control
@@ -143,7 +143,7 @@ DroneSynthesizer::DroneSynthesizer()
     voice.initialize();
     
     // Set up global LFO
-    globalLFO.begin(1.0, lfoRate, 0); // sine wave for smooth modulation
+    globalLFO.begin(1.0, lfoRate, WAVEFORM_SINE); // sine wave for smooth modulation
     updateGlobalLFO();
     
     // Connect voice directly to output amplifiers
@@ -205,9 +205,13 @@ void DroneSynthesizer::setFilterResonance(float resonance) {
 }
 
 void DroneSynthesizer::setLFORate(float rate) {
-    lfoRate = constrain(rate, 0.1f, 10.0f);
-    updateGlobalLFO();  // Update the actual LFO parameters
-    Serial.printf("Global LFO rate set to %.2f Hz\n", lfoRate);
+    lfoRate = constrain(rate, 0.0f, 10.0f);  // Allow 0.0f to disable LFO
+    globalLFO.frequency(lfoRate);
+    if (lfoRate == 0.0f) {
+        Serial.println("Global LFO disabled");
+    } else {
+        Serial.printf("Global LFO rate set to %.2f Hz\n", lfoRate);
+    }
 }
 
 void DroneSynthesizer::setLFODepth(float depth) {
@@ -256,6 +260,10 @@ AudioStream* DroneSynthesizer::getLeftOutput() {
 
 AudioStream* DroneSynthesizer::getRightOutput() {
     return &rightAmp;
+}
+
+AudioStream* DroneSynthesizer::getOscMixer() {
+    return &voice.oscMixer;
 }
 
 // Voice management methods (removed - single voice only)
