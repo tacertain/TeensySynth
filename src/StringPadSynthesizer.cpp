@@ -8,7 +8,6 @@ const StringPadSynthesizer::PresetData StringPadSynthesizer::presetData[PRESET_C
         .filterCutoff = 0.4f,       // Warm, not too bright
         .filterResonance = 0.3f,    // Gentle resonance
         .detuneAmount = 0.7f,       // Rich ensemble effect
-        .masterVolume = 0.8f,       // Full but controlled volume
         .attackTime = 200.0f,       // Smooth attack
         .releaseTime = 800.0f       // Long, sustaining release
     },
@@ -17,7 +16,6 @@ const StringPadSynthesizer::PresetData StringPadSynthesizer::presetData[PRESET_C
         .filterCutoff = 1.0f,       // Brighter sound
         .filterResonance = 0.3f,    // More character
         .detuneAmount = 0.68f,       // Moderate ensemble
-        .masterVolume = 0.9f,       // Punchy volume
         .attackTime = 150.0f,       // Quicker attack
         .releaseTime = 600.0f       // Medium release
     },
@@ -26,7 +24,6 @@ const StringPadSynthesizer::PresetData StringPadSynthesizer::presetData[PRESET_C
         .filterCutoff = 0.3f,       // Very warm
         .filterResonance = 0.2f,    // Subtle resonance
         .detuneAmount = 0.4f,       // Gentle ensemble
-        .masterVolume = 0.6f,       // Soft volume
         .attackTime = 300.0f,       // Slow, gentle attack
         .releaseTime = 1200.0f      // Very long release
     },
@@ -35,7 +32,6 @@ const StringPadSynthesizer::PresetData StringPadSynthesizer::presetData[PRESET_C
         .filterCutoff = 0.35f,      // Warm analog sound
         .filterResonance = 0.5f,    // Analog-style resonance
         .detuneAmount = 0.8f,       // Heavy ensemble for analog feel
-        .masterVolume = 0.7f,       // Moderate volume
         .attackTime = 250.0f,       // Classic analog attack
         .releaseTime = 1000.0f      // Standard analog release
     },
@@ -44,7 +40,6 @@ const StringPadSynthesizer::PresetData StringPadSynthesizer::presetData[PRESET_C
         .filterCutoff = 0.6f,       // Bright and airy
         .filterResonance = 0.6f,    // Emphasize harmonics
         .detuneAmount = 0.9f,       // Maximum ensemble shimmer
-        .masterVolume = 0.7f,       // Ethereal volume
         .attackTime = 400.0f,       // Slow, building attack
         .releaseTime = 1500.0f      // Long, shimmering decay
     }
@@ -154,7 +149,7 @@ void StringPadSynthesizer::StringVoice::stopNote() {
     }
 }
 
-void StringPadSynthesizer::StringVoice::updateEnvelope(float masterVol) {
+void StringPadSynthesizer::StringVoice::updateEnvelope() {
     if (!active) return;
     
     unsigned long currentTime = millis();
@@ -166,10 +161,10 @@ void StringPadSynthesizer::StringVoice::updateEnvelope(float masterVol) {
         // Use configurable attack time instead of hardcoded value
         if (attackTime < (unsigned long)attackTimeMs) {
             float attackProgress = (float)attackTime / attackTimeMs;
-            currentGain = velocity * masterVol * attackProgress;
+            currentGain = velocity * attackProgress;
         } else {
             // Sustain phase
-            currentGain = velocity * masterVol;
+            currentGain = velocity;
         }
         
         envAmp.gain(currentGain);
@@ -185,7 +180,7 @@ void StringPadSynthesizer::StringVoice::updateEnvelope(float masterVol) {
         // Use configurable release time instead of hardcoded value
         if (releaseTime < (unsigned long)releaseTimeMs) {
             float releaseProgress = (float)releaseTime / releaseTimeMs;
-            currentGain = velocity * masterVol * (1.0f - releaseProgress);
+            currentGain = velocity * (1.0f - releaseProgress);
             envAmp.gain(currentGain);
         } else {
             // Note finished
@@ -248,7 +243,6 @@ StringPadSynthesizer::StringPadSynthesizer()
     , detuneAmount(0.6f)        // Medium detuning for ensemble effect
     , attackTime(200.0f)        // 200ms attack
     , releaseTime(1000.0f)      // 1000ms release
-    , masterVolume(1.0f)        // 100% volume
     , highpassMultiplier(1.0f)  // Default highpass multiplier (CC 64 = 1.0)
     , chordMode(CHORD_MODE_MAJOR)  // Default to chord mode
     , currentPreset(PRESET_BRIGHT_STRINGS)  // Default to bright strings preset
@@ -440,18 +434,13 @@ void StringPadSynthesizer::setReleaseTime(float releaseMs) {
     updateVoiceParameters();
 }
 
-void StringPadSynthesizer::setVolume(float volume) {
-    masterVolume = constrain(volume, 0.0f, 1.0f);
-    // Volume is handled through envelope gain in Phase 1
-}
-
 AudioStream* StringPadSynthesizer::getOutput() {
     return &finalFilter;  // Return filtered output to prevent aliasing
 }
 
 void StringPadSynthesizer::processEnvelope() {
     for (int i = 0; i < MAX_VOICES; i++) {
-        voices[i].updateEnvelope(masterVolume);
+        voices[i].updateEnvelope();
     }
 }
 
@@ -531,7 +520,6 @@ void StringPadSynthesizer::loadPreset(StringPadPreset preset) {
     setFilterCutoff(data.filterCutoff);
     setFilterResonance(data.filterResonance);
     setDetuneAmount(data.detuneAmount);
-    setVolume(data.masterVolume);
     setAttackTime(data.attackTime);
     setReleaseTime(data.releaseTime);
 }

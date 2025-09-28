@@ -113,7 +113,7 @@ private:
         void cleanup();
         void startNote(int note, float freq, float vel);
         void stopNote();
-        void updateEnvelope(float masterVol);
+        void updateEnvelope();
         void updateEnvelopeParameters(float attackMs, float releaseMs);
         void updateOscillatorFrequencies(float baseFreq, float detuneAmount);
         void updateFilter(float cutoff, float resonance);
@@ -141,7 +141,6 @@ private:
     float detuneAmount;        // 0.0 - 1.0 (maps to cents)
     float attackTime;          // milliseconds
     float releaseTime;         // milliseconds
-    float masterVolume;        // 0.0 - 1.0
     float highpassMultiplier;  // Multiplier for highpass filter frequency (0.05 - 4.0)
     
     // Chord mode
@@ -152,7 +151,6 @@ private:
         float filterCutoff;
         float filterResonance;
         float detuneAmount;
-        float masterVolume;
         float attackTime;
         float releaseTime;
     };

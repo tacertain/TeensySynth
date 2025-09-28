@@ -159,7 +159,7 @@ void OnNoteOn(byte channel, byte note, byte velocity)
     Serial.print(vel);
     Serial.print(")");
     Serial.println();
-    synth.noteOn(note, freq, 1.0f);
+    synth.noteOn(channel, note, freq, vel);
 }
 
 void OnNoteOff(byte channel, byte note, byte velocity)
@@ -169,7 +169,7 @@ void OnNoteOff(byte channel, byte note, byte velocity)
     Serial.print(", note=");
     Serial.print(note);
     Serial.println();
-    synth.noteOff(note);
+    synth.noteOff(channel, note);
 }
 
 void OnControlChange(byte channel, byte control, byte value)
@@ -191,7 +191,7 @@ void OnControlChange(byte channel, byte control, byte value)
         synth.setFilterStrength(value);
     }
 
-    if (channel == 1 && control == 7)
+    if (control == 7)
     {
         synth.setMasterVolume((float)value / 64.0f); // Updated method name
         Serial.printf("Master volume: %.2f\n", (float)value / 64.0f);

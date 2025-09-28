@@ -13,7 +13,8 @@ public:
         PLUCKED_STRINGS,    // Karplus-Strong plucked strings (renamed from STRINGS_ONLY)
         DRONE,              // Analog-style drone synthesizer  
         STRING_PADS,        // Classic 80s string pads
-        SPLIT               // Split mode: drone below split point, string pads above
+        SPLIT,              // Split mode: drone below split point, string pads above
+        IRAN                // Special mode for I Ran
     };
 
 private:
@@ -55,7 +56,7 @@ private:
     float droneVolume = 1.0f;
     float stringPadVolume = 1.0f;
     
-    SynthMode currentMode = SPLIT; 
+    SynthMode currentMode = IRAN; 
     uint8_t splitPoint = 48; // C3 
 
 public:
@@ -148,7 +149,6 @@ public:
         printPeakLevels();
         
         currentMode = mode; 
-        updateMixerGains();
         resetPeakMonitors(); // Reset peak monitors when mode changes
     }
     
@@ -170,7 +170,8 @@ public:
     }
     
     void setStringPadVolume(float volume) {
-        stringPad.setVolume(volume);
+        stringPadVolume = volume;
+        updateMixerGains();
     }
     
     // Synthesizer access
@@ -183,8 +184,36 @@ public:
         stringPad.processEnvelope();
     }
 
-    void noteOn(int key, float freq, float velocity) {        
-        switch (currentMode) {
+    HybridSynthesizer::SynthMode modeFromChannel(byte channel, HybridSynthesizer::SynthMode defaultMode)
+    {
+        auto mode = currentMode;
+        switch (channel)
+        {
+        case 2:
+            mode = PLUCKED_STRINGS;
+            break;
+        case 3:
+            mode = DRONE;
+            break;
+        case 4:
+            mode = STRING_PADS;
+            break;
+        case 5:
+            mode = SPLIT;
+            break;
+        case 6:
+            mode = IRAN;
+            break;
+        default:
+            break;
+        }
+        return mode;
+    }
+
+    void noteOn(byte channel, int key, float freq, float velocity) {
+        auto mode = modeFromChannel(channel, currentMode);
+
+        switch (mode) {
             case PLUCKED_STRINGS:
                 playStringNote(key, freq, velocity);
                 break;
@@ -198,12 +227,27 @@ public:
                 break;
             case SPLIT:
                 // Split mode: drone below split point, string pads above
-                if (key < splitPoint) {
+                if (key < splitPoint)
+                {
                     drone.noteOn(key, velocity);
-                } else {
+                }
+                else
+                {
+                    stringPad.noteOn(key, velocity, StringPadSynthesizer::CHORD_MODE_OFF);
+                }
+                break;
+            case IRAN:
+                // Split mode: drone below split point, string pads above
+                if (key < splitPoint)
+                {
+                    drone.noteOn(key, 1.0f);
+                }
+                else
+                {
                     // Use chord mode for specific keys in split mode
                     StringPadSynthesizer::ChordMode chordMode = StringPadSynthesizer::CHORD_MODE_OFF;
-                    if (key >= 53 && key <= 57) {
+                    if (key >= 53 && key <= 57)
+                    {
                         chordMode = StringPadSynthesizer::CHORD_MODE_MAJOR;
                     }
                     else if (key == 60)
@@ -211,14 +255,16 @@ public:
                         chordMode = StringPadSynthesizer::CHORD_MODE_OCTAVE;
                     }
                     key += 24;
-                    stringPad.noteOn(key, velocity, chordMode);
+                    stringPad.noteOn(key, 1.0f, chordMode);
                 }
                 break;
-        }
+            }
     }
 
-    void noteOff(int key) {
-        switch (currentMode) {
+    void noteOff(byte channel, int key) {
+        auto mode = modeFromChannel(channel, currentMode);
+
+        switch (mode) {
             case PLUCKED_STRINGS:
                 // Stop string if it's playing this key
                 {
@@ -240,22 +286,39 @@ public:
                 break;
             case SPLIT:
                 // Split mode: drone below split point, string pads above
-                if (key < splitPoint) {
+                if (key < splitPoint)
+                {
                     drone.noteOff(key);
-                } else {
+                }
+                else
+                {
+
+                    stringPad.noteOff(key, StringPadSynthesizer::CHORD_MODE_OFF);
+                }
+                break;
+            case IRAN:
+                // Split mode: drone below split point, string pads above
+                if (key < splitPoint)
+                {
+                    drone.noteOff(key);
+                }
+                else
+                {
                     // Use chord mode for specific keys in split mode
                     StringPadSynthesizer::ChordMode chordMode = StringPadSynthesizer::CHORD_MODE_OFF;
-                    if (key >= 53 && key <= 57) {
+                    if (key >= 53 && key <= 57)
+                    {
                         chordMode = StringPadSynthesizer::CHORD_MODE_MAJOR;
                     }
-                    else if (key == 60) {
+                    else if (key == 60)
+                    {
                         chordMode = StringPadSynthesizer::CHORD_MODE_OCTAVE;
                     }
                     key += 24;
                     stringPad.noteOff(key, chordMode);
                 }
                 break;
-        }
+            }
     }
 
     void setPitchBend(float bendAmount) {
@@ -335,33 +398,10 @@ private:
     }
     
     void updateMixerGains() {
-        float stringGain = 0.0f;
-        float droneGain = 0.0f;
-        float stringPadGain = 0.0f;
-        
-        switch (currentMode) {
-            case PLUCKED_STRINGS:
-                stringGain = masterVolume * stringVolume;
-                droneGain = 0.0f;
-                stringPadGain = 0.0f;
-                break;
-            case DRONE:
-                stringGain = 0.0f;
-                droneGain = masterVolume * droneVolume;
-                stringPadGain = 0.0f;
-                break;
-            case STRING_PADS:
-                stringGain = 0.0f;
-                droneGain = 0.0f;
-                stringPadGain = masterVolume * stringPadVolume;
-                break;
-            case SPLIT:
-                stringGain = 0.0f; // Plucked strings not used in split mode
-                droneGain = masterVolume * droneVolume;
-                stringPadGain = masterVolume * stringPadVolume;
-                break;
-        }
-        
+        float stringGain = masterVolume * stringVolume;
+        float droneGain = masterVolume * droneVolume;
+        float stringPadGain = masterVolume * stringPadVolume;
+
         // Apply string gains
         for (int i = 0; i < 4; ++i) {
             mixerL1.gain(i, stringGain);
