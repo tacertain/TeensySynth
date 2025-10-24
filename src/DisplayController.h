@@ -37,7 +37,7 @@ private:
     
     // Framebuffers
     uint16_t fb[TFT_WIDTH * TFT_HEIGHT];
-    uint16_t fb_internal[TFT_WIDTH * TFT_HEIGHT] __attribute__((section(".dmamem")));
+    uint16_t* fb_internal;
     
     // Diff buffers for efficient updates
     ILI9341_T4::DiffBuffStatic<4096> diff1;

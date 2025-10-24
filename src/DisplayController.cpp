@@ -1,7 +1,11 @@
 #include "DisplayController.h"
 
+// Static DMAMEM buffer for TFT internal framebuffer
+DMAMEM static uint16_t fb_internal_buffer[TFT_WIDTH * TFT_HEIGHT];
+
 DisplayController::DisplayController()
     : tft(TFT_CS, TFT_DC, TFT_SCK, TFT_MOSI, TFT_MISO, TFT_RST, TFT_TCS, TFT_TIRQ)
+    , fb_internal(fb_internal_buffer)
     , gfx(fb, TFT_WIDTH, TFT_HEIGHT)
     , available(false)
     , lastUpdateTime(0) {
