@@ -35,5 +35,5 @@
 // ============================================================================
 // Feature Flags
 // ============================================================================
-// Uncomment to disable TFT completely if it causes hanging
-// #define DISABLE_TFT
+// Uncomment to enable TFT display - will hang if enabled but not attached
+// #define TFT_DISPLAY

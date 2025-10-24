@@ -12,7 +12,6 @@ DisplayController::DisplayController()
 }
 
 bool DisplayController::begin() {
-#ifdef TFT_DISPLAY
     Serial.println("Initializing TFT display...");
     if (!tft.begin(SPI_SPEED)) {
         Serial.println("TFT initialization failed");
@@ -34,11 +33,6 @@ bool DisplayController::begin() {
     
     available = true;
     return true;
-#else
-    Serial.println("TFT disabled by compile flag - skipping initialization");
-    available = false;
-    return false;
-#endif
 }
 
 void DisplayController::update() {

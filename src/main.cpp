@@ -16,7 +16,9 @@ USBHost myusb;
 MIDIDevice midi1(myusb);
 MIDIController midiController(synth, myusb, midi1);
 
+#ifdef TFT_DISPLAY
 DisplayController displayController;
+#endif
 
 uint32_t count = 0;
 
@@ -29,15 +31,15 @@ void setup()
     Serial.println("Hello, world!");
     Serial8.begin(400000, SERIAL_8N1);
 
+#ifdef TFT_DISPLAY
     // Initialize TFT Display
-    if (displayController.begin()) {
-        // Set the first string synthesizer to use the TFT display
-        synth.getString(0).setTFTDisplay(displayController.getGraphics());
-        Serial.println("TFT display assigned to string synthesizer 0");
-    } else {
-        Serial.println("Running without TFT display - audio functionality will work normally");
-    }
-
+    displayController.begin();
+    // Set the first string synthesizer to use the TFT display
+    synth.getString(0).setTFTDisplay(displayController.getGraphics());
+    Serial.println("TFT display assigned to string synthesizer 0");
+#else
+    Serial.println("Running without TFT display - audio functionality will work normally");
+#endif
     midiController.queryUSBDeviceInfo();
     Serial.println("Setup complete - ready for input");
 }
@@ -58,6 +60,7 @@ void loop()
     // Update synthesizer envelopes and other processing
     synth.update();
     
-    // Update display if available
+#ifdef TFT_DISPLAY
     displayController.update();
+#endif
 }
