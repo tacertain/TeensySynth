@@ -89,6 +89,7 @@ This document outlines recommended cleanup and refactoring tasks to improve code
 - **Action**: Standardize on `#pragma once` throughout (more concise, supported on Teensy)
 - **Benefit**: Consistency, slightly faster compilation
 - **Status**: ✅ **COMPLETED** - Changed `karplus_strong_string_synth.h` and `AudioPeakMonitor.h` to use `#pragma once`
+- **Note**: `FrameBufferGFX.h` still uses traditional include guards
 
 ### 3.2 Minimize Header Dependencies ✅
 - **Issue**: Some headers include unnecessary dependencies
@@ -184,11 +185,12 @@ This document outlines recommended cleanup and refactoring tasks to improve code
 
 ## 7. Configuration Management
 
-### 7.1 Remove Commented Code
+### 7.1 Remove Commented Code ✅
 - **Issue**: Commented conditional compilation (`#define DISABLE_TFT`, `#ifdef TFT_DISPLAY`)
 - **Location**: `main.cpp` lines 12, 85
 - **Action**: Either implement proper feature flags or remove dead code
 - **Benefit**: Cleaner code, working feature toggles
+- **Status**: ✅ **COMPLETED** - `TFT_DISPLAY` flag now properly implemented in `hardware_config.h` and consistently used throughout `main.cpp`
 
 ### 7.2 Create Configuration File
 - **Issue**: Default parameters scattered throughout code
@@ -394,10 +396,11 @@ This document outlines recommended cleanup and refactoring tasks to improve code
 
 ## 16. Unused Code Review
 
-### 16.1 Review Synthesizer.h Usage
+### 16.1 Review Synthesizer.h Usage ✅
 - **Issue**: `Synthesizer.h` appears to be superseded by `HybridSynthesizer`
 - **Action**: Determine if still needed, remove or mark deprecated
 - **Benefit**: Reduce confusion about which class to use
+- **Status**: ✅ **COMPLETED** - `Synthesizer.h` has been removed from the codebase
 
 ### 16.2 Review chords.h
 - **Issue**: `chords.h` present but usage unclear
@@ -413,11 +416,12 @@ This document outlines recommended cleanup and refactoring tasks to improve code
 
 ## 17. Specific Bug Risks
 
-### 17.1 Fix Potential Memory Leak in Synthesizer.h
+### 17.1 Fix Potential Memory Leak in Synthesizer.h ✅
 - **Issue**: `patchCordSumL` assigned twice in constructor (lines 47-48)
 - **Location**: `Synthesizer.h` lines 47-48
 - **Action**: Create separate `patchCordSumL2` variable
 - **Impact**: **HIGH** - Memory leak on each instance
+- **Status**: ✅ **COMPLETED** - `Synthesizer.h` removed; `HybridSynthesizer.h` uses properly named variables (`patchCordSumL1`, `patchCordSumL2`, `patchCordSumL4`, `patchCordSumL5`)
 
 ### 17.2 Review Uninitialized Variables
 - **Issue**: Some member variables may not be initialized in all constructors
@@ -435,21 +439,21 @@ This document outlines recommended cleanup and refactoring tasks to improve code
 ## Priority Recommendations
 
 ### High Priority (Fix First)
-1. **Fix memory leak in Synthesizer.h** (17.1)
-2. **Rename karplus_stong_string_synth.cpp** (1.1)
-3. **Remove or organize .ignore files** (1.2)
+1. ✅ **Fix memory leak in Synthesizer.h** (17.1) - COMPLETED
+2. ✅ **Rename karplus_stong_string_synth.cpp** (1.1) - COMPLETED
+3. ✅ **Remove or organize .ignore files** (1.2) - COMPLETED
 4. **Add parameter validation** (4.4)
 5. **Simplify MIDI CC handler** (8.1)
 
 ### Medium Priority (Architecture Improvements)
-6. **Extract hardware pin definitions** (2.1)
-7. **Create MIDIController class** (2.2)
+6. ✅ **Extract hardware pin definitions** (2.1) - COMPLETED
+7. ✅ **Create MIDIController class** (2.2) - COMPLETED
 8. **Standardize naming conventions** (10.1)
 9. **Add function documentation** (10.2)
 10. **Implement logging levels** (11.1)
 
 ### Low Priority (Polish)
-11. **Organize documentation files** (1.4)
+11. ✅ **Organize documentation files** (1.4) - COMPLETED
 12. **Add unit tests** (14.1)
 13. **Improve variable names** (10.3)
 14. **Document DSP algorithms** (12.1)
