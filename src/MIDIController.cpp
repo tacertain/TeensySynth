@@ -1,4 +1,6 @@
 #include "MIDIController.h"
+
+// Project headers
 #include "StringPadSynthesizer.h"
 
 // Static instance pointer for C-style callbacks

@@ -1,9 +1,9 @@
-#ifndef AUDIO_PEAK_MONITOR_H
-#define AUDIO_PEAK_MONITOR_H
+#pragma once
 
+// Third-party libraries
 #include <Arduino.h>
-#include <AudioStream.h>
 #include <Audio.h>
+#include <AudioStream.h>
 
 class AudioPeakMonitor : public AudioStream {
 public:
@@ -16,5 +16,3 @@ private:
     audio_block_t *inputQueueArray[1];
     int16_t minVal, maxVal;
 };
-
-#endif // AUDIO_PEAK_MONITOR_H

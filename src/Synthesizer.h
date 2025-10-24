@@ -1,7 +1,13 @@
 #pragma once
-#include <output_i2s.h>
-#include <Audio.h>
+
+// Standard library
 #include <map>
+
+// Third-party libraries
+#include <Audio.h>
+#include <output_i2s.h>
+
+// Project headers
 #include "karplus_strong_string_synth.h"
 
 class Synthesizer {

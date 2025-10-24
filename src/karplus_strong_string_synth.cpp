@@ -1,6 +1,12 @@
-#include <Arduino.h>
 #include "karplus_strong_string_synth.h"
+
+#include <Arduino.h>
+#include <utility/dspinst.h>
 #include <TeensyThreads.h>
+#include <ILI9341_t4.h>
+#include <SPI.h>
+
+#include "FrameBufferGFX.h"
 
 static uint32_t pseudorand(uint32_t lo)
 {

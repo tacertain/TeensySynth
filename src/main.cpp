@@ -1,11 +1,14 @@
-#include "USBHost_t36.h"
-#include <synth_karplusstrong.h>
+// Third-party libraries
 #include <output_i2s.h>
+#include <synth_karplusstrong.h>
 #include <SD.h>
-#include "HybridSynthesizer.h"
+#include "USBHost_t36.h"
+
+// Project headers
 #include "hardware_config.h"
-#include "MIDIController.h"
 #include "DisplayController.h"
+#include "HybridSynthesizer.h"
+#include "MIDIController.h"
 
 HybridSynthesizer synth; // Use the new hybrid synthesizer
 

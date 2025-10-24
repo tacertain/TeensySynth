@@ -1,11 +1,17 @@
 #pragma once
-#include <output_i2s.h>
-#include <Audio.h>
+
+// Standard library
 #include <map>
-#include "karplus_strong_string_synth.h"
-#include "DroneSynthesizer.h"
-#include "StringPadSynthesizer.h"
+
+// Third-party libraries
+#include <Audio.h>
+#include <output_i2s.h>
+
+// Project headers
 #include "AudioPeakMonitor.h"
+#include "DroneSynthesizer.h"
+#include "karplus_strong_string_synth.h"
+#include "StringPadSynthesizer.h"
 
 class HybridSynthesizer {
 public:

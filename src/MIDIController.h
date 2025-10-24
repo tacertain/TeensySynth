@@ -1,7 +1,10 @@
 #pragma once
 
+// Third-party libraries
 #include <Arduino.h>
 #include "USBHost_t36.h"
+
+// Project headers
 #include "HybridSynthesizer.h"
 
 /**

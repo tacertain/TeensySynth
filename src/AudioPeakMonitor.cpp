@@ -1,6 +1,6 @@
+#include "AudioPeakMonitor.h"
 
 #include <Arduino.h>
-#include "AudioPeakMonitor.h"
 
 AudioPeakMonitor::AudioPeakMonitor()
     : AudioStream(1, inputQueueArray), minVal(32767), maxVal(-32768) {}

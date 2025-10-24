@@ -1,9 +1,12 @@
 #pragma once
 
-#include <Arduino.h>
+// Third-party libraries
 #include <Adafruit_GFX.h>
+#include <Arduino.h>
 #include <ILI9341_t4.h>
 #include <SPI.h>
+
+// Project headers
 #include "FrameBufferGFX.h"
 #include "hardware_config.h"
 

@@ -1,11 +1,10 @@
-#ifndef _karplus_strong_string_synth_h_
-#define _karplus_strong_string_synth_h_
+#pragma once
+
 #include <Arduino.h>
 #include <AudioStream.h>
-#include <utility/dspinst.h>
-#include <ILI9341_t4.h>
-#include <SPI.h>
-#include "FrameBufferGFX.h"
+
+// Forward declarations
+class FramebufferGFX;
 
 #define NUM_SAMPLES 512
 
@@ -113,5 +112,3 @@ void displayUpdateThread(KarplusStrongStringSynth* synthInstance);
 
 // Non-instance function for drawing buffer graph
 void drawBufferGraph(FramebufferGFX* gfx, int16_t* buffer, uint16_t bufferLen, float frequency, int32_t bufferGeneration);
-
-#endif
