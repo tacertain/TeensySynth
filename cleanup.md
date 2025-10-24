@@ -4,6 +4,12 @@ This document outlines recommended cleanup and refactoring tasks to improve code
 
 ---
 
+## 0. Instructions to copilot agent.
+
+- Only execute the sections specified.
+- Update this document with any changes made.
+- Commit the changes and the file update when finished with a set of changes.
+
 ## 1. File Organization and Naming ✅ COMPLETED
 
 ### 1.1 Fix Filename Typo ✅
