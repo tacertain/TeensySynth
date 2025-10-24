@@ -2,7 +2,11 @@
 #include <Arduino.h>
 
 StringsSynthesizer::StringsSynthesizer()
-    : pitchBendFactor(1.0f)
+    : mixerConnectionL1(nullptr)
+    , mixerConnectionL2(nullptr)
+    , mixerConnectionR1(nullptr)
+    , mixerConnectionR2(nullptr)
+    , pitchBendFactor(1.0f)
     , volume(1.0f)
     , attenuation(66)
     , filterStrength(103)
@@ -14,12 +18,20 @@ StringsSynthesizer::StringsSynthesizer()
         voiceConnectionsR[i] = new AudioConnection(voices[i], 0, mixerR1, i);
     }
     
-    // Connect voices 4-7 to mixerL2 and mixerR2
+    // Connect voices 4-7 to mixerL2 and mixerR2 (channels 0-3)
     for (int i = 4; i < MAX_VOICES; ++i) {
         voiceConnectionsL[i] = new AudioConnection(voices[i], 0, mixerL2, i - 4);
         voiceConnectionsR[i] = new AudioConnection(voices[i], 0, mixerR2, i - 4);
     }
     
+    // CRITICAL: Connect mixerL1/R1 outputs to mixerL2/R2 so all 8 voices are heard!
+    // This combines voices 0-3 (from mixerL1/R1) with voices 4-7 (in mixerL2/R2)
+    // Using the 4th channel (index 3) of the second mixers
+    mixerConnectionL1 = new AudioConnection(mixerL1, 0, sumL, 0);
+    mixerConnectionL2 = new AudioConnection(mixerL2, 0, sumL, 1);
+    mixerConnectionR1 = new AudioConnection(mixerR1, 0, sumR, 0);
+    mixerConnectionR2 = new AudioConnection(mixerR2, 0, sumR, 1);
+
     // Set initial mixer gains
     updateMixerGains();
 }
@@ -30,6 +42,10 @@ StringsSynthesizer::~StringsSynthesizer() {
         delete voiceConnectionsL[i];
         delete voiceConnectionsR[i];
     }
+    delete mixerConnectionL1;
+    delete mixerConnectionL2;
+    delete mixerConnectionR1;
+    delete mixerConnectionR2;
 }
 
 void StringsSynthesizer::noteOn(int midiNote, float velocity) {
@@ -37,16 +53,31 @@ void StringsSynthesizer::noteOn(int midiNote, float velocity) {
     int voiceIndex = findAvailableVoice();
     if (voiceIndex == -1) {
         // No available voice - could implement voice stealing here
+        Serial.println("StringsSynthesizer: No available voice!");
         return;
     }
     
     // Calculate frequency
     float freq = midiNoteToFrequency(midiNote);
     
+    Serial.print("StringsSynthesizer::noteOn - MIDI note: ");
+    Serial.print(midiNote);
+    Serial.print(", freq: ");
+    Serial.print(freq);
+    Serial.print(", velocity: ");
+    Serial.print(velocity);
+    Serial.print(", voice: ");
+    Serial.println(voiceIndex);
+    
     // Start the note on the voice
-    if (voices[voiceIndex].noteOn(freq * pitchBendFactor, velocity) == 0) {
+    int result = voices[voiceIndex].noteOn(freq * pitchBendFactor, velocity);
+    if (result == 0) {
         noteToVoice[midiNote] = voiceIndex;
         noteToBaseFreq[midiNote] = freq;
+        Serial.println("  -> Voice started successfully");
+    } else {
+        Serial.print("  -> Voice failed to start, error: ");
+        Serial.println(result);
     }
 }
 
@@ -119,11 +150,11 @@ int StringsSynthesizer::getActiveVoiceCount() const {
 }
 
 AudioStream* StringsSynthesizer::getLeftOutput() {
-    return &mixerL2;
+    return &sumL;
 }
 
 AudioStream* StringsSynthesizer::getRightOutput() {
-    return &mixerR2;
+    return &sumR;
 }
 
 int StringsSynthesizer::findAvailableVoice() {

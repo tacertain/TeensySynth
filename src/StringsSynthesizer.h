@@ -52,16 +52,22 @@ private:
     // String voices
     KarplusStrongStringSynth voices[MAX_VOICES];
     
-    // Audio mixing
+    // Audio mixing - separate L/R paths
     AudioMixer4 mixerL1;  // Mix voices 0-3 (left)
     AudioMixer4 mixerL2;  // Mix voices 4-7 (left)
     AudioMixer4 mixerR1;  // Mix voices 0-3 (right)
     AudioMixer4 mixerR2;  // Mix voices 4-7 (right)
-    
+    AudioMixer4 sumL;
+    AudioMixer4 sumR;
+
     // Audio connections
     AudioConnection* voiceConnectionsL[MAX_VOICES]; // Voice to mixer L
     AudioConnection* voiceConnectionsR[MAX_VOICES]; // Voice to mixer R
-    
+    AudioConnection *mixerConnectionL1;             // mixerL1 to sumL
+    AudioConnection *mixerConnectionL2;             // mixerL2 to sumL
+    AudioConnection *mixerConnectionR1;              // mixerR1 to sumR
+    AudioConnection *mixerConnectionR2;              // mixerR2 to sumR
+
     // Voice allocation tracking
     std::map<int, int> noteToVoice;      // MIDI note -> voice index
     std::map<int, float> noteToBaseFreq; // MIDI note -> base frequency (without bend)
