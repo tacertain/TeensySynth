@@ -10,7 +10,7 @@
 // Project headers
 #include "AudioPeakMonitor.h"
 #include "DroneSynthesizer.h"
-#include "karplus_strong_string_synth.h"
+#include "StringsSynthesizer.h"
 #include "StringPadSynthesizer.h"
 
 class HybridSynthesizer {
@@ -25,7 +25,7 @@ public:
 
 private:
     // Karplus-Strong string synthesis
-    KarplusStrongStringSynth strings[8];
+    StringsSynthesizer strings;
     
     // Drone synthesizer
     DroneSynthesizer drone;
@@ -34,8 +34,6 @@ private:
     StringPadSynthesizer stringPad;
     
     // Audio mixing and output
-    AudioMixer4 mixerL1, mixerL2;  // String mixers
-    AudioMixer4 mixerR1, mixerR2;  // String mixers
     AudioMixer4 mixerL4, mixerR4;  // Drone mixers
     AudioMixer4 mixerL5, mixerR5;  // String pad mixers
     AudioMixer4 sumL, sumR;
@@ -43,20 +41,21 @@ private:
     AudioOutputI2S i2s1;
     
     // Audio connections
-    AudioConnection* stringPatchCords[16]; // 8 for L, 8 for R (strings)
+    AudioConnection* stringPatchCordL;     // Strings to mixer L
+    AudioConnection* stringPatchCordR;     // Strings to mixer R
     AudioConnection* dronePatchCordL;      // Drone to mixer
     AudioConnection* dronePatchCordR;      // Drone to mixer
     AudioConnection* stringPadPatchCordL;  // String pad to mixer
     AudioConnection* stringPadPatchCordR;  // String pad to mixer
-    AudioConnection* patchCordSumL1, *patchCordSumL2, *patchCordSumL4, *patchCordSumL5;
-    AudioConnection* patchCordSumR1, *patchCordSumR2, *patchCordSumR4, *patchCordSumR5;
+    AudioConnection* patchCordSumL1, *patchCordSumL4, *patchCordSumL5;
+    AudioConnection* patchCordSumR1, *patchCordSumR4, *patchCordSumR5;
     AudioConnection* patchCordMonitorL, *patchCordMonitorR;  // Connections to peak monitors
     AudioConnection* patchCordL;
     AudioConnection* patchCordR;
 
-    std::map<int, int> keyToString; // key -> string index
-    std::map<int, float> keyToBaseFreq; // key -> base frequency (without bend)
-    float pitchBendFactor = 1.0f; // Current pitch bend multiplier
+    std::map<int, int> keyToString; // key -> string index (deprecated - managed internally now)
+    std::map<int, float> keyToBaseFreq; // key -> base frequency (deprecated - managed internally now)
+    float pitchBendFactor = 1.0f; // Current pitch bend multiplier (deprecated - managed internally now)
     float masterVolume = 1.0f;
     float stringVolume = 1.0f;
     float droneVolume = 1.0f;
@@ -67,27 +66,21 @@ private:
 
 public:
     HybridSynthesizer() :
+        stringPatchCordL(nullptr),
+        stringPatchCordR(nullptr),
         dronePatchCordL(nullptr),
         dronePatchCordR(nullptr),
         stringPadPatchCordL(nullptr),
         stringPadPatchCordR(nullptr),
-        patchCordSumL1(nullptr), patchCordSumL2(nullptr), patchCordSumL4(nullptr), patchCordSumL5(nullptr),
-        patchCordSumR1(nullptr), patchCordSumR2(nullptr), patchCordSumR4(nullptr), patchCordSumR5(nullptr),
+        patchCordSumL1(nullptr), patchCordSumL4(nullptr), patchCordSumL5(nullptr),
+        patchCordSumR1(nullptr), patchCordSumR4(nullptr), patchCordSumR5(nullptr),
         patchCordMonitorL(nullptr), patchCordMonitorR(nullptr),
         patchCordL(nullptr),
         patchCordR(nullptr)
     {
-        // Connect strings 0-3 to mixerL1 and mixerR1
-        for (int i = 0; i < 4; ++i) {
-            stringPatchCords[i]     = new AudioConnection(strings[i], 0, mixerL1, i);
-            stringPatchCords[i + 8] = new AudioConnection(strings[i], 0, mixerR1, i);
-        }
-        
-        // Connect strings 4-7 to mixerL2 and mixerR2
-        for (int i = 4; i < 8; ++i) {
-            stringPatchCords[i]     = new AudioConnection(strings[i], 0, mixerL2, i - 4);
-            stringPatchCords[i + 8] = new AudioConnection(strings[i], 0, mixerR2, i - 4);
-        }
+        // Connect strings to sum mixers
+        stringPatchCordL = new AudioConnection(*strings.getLeftOutput(), 0, sumL, 0);
+        stringPatchCordR = new AudioConnection(*strings.getRightOutput(), 0, sumR, 0);
         
         // Connect drone to mixerL4 and mixerR4
         dronePatchCordL = new AudioConnection(*drone.getLeftOutput(), 0, mixerL4, 0);
@@ -98,40 +91,35 @@ public:
         stringPadPatchCordR = new AudioConnection(*stringPad.getOutput(), 0, mixerR5, 0);
         
         // Sum all mixers
-        patchCordSumL1 = new AudioConnection(mixerL1, 0, sumL, 0);
-        patchCordSumL2 = new AudioConnection(mixerL2, 0, sumL, 1);
-        patchCordSumL4 = new AudioConnection(mixerL4, 0, sumL, 2);
-        patchCordSumL5 = new AudioConnection(mixerL5, 0, sumL, 3);
+        patchCordSumL1 = new AudioConnection(mixerL4, 0, sumL, 1);
+        patchCordSumL4 = new AudioConnection(mixerL5, 0, sumL, 2);
         
-        patchCordSumR1 = new AudioConnection(mixerR1, 0, sumR, 0);
-        patchCordSumR2 = new AudioConnection(mixerR2, 0, sumR, 1);
-        patchCordSumR4 = new AudioConnection(mixerR4, 0, sumR, 2);
-        patchCordSumR5 = new AudioConnection(mixerR5, 0, sumR, 3);
+        patchCordSumR1 = new AudioConnection(mixerR4, 0, sumR, 1);
+        patchCordSumR4 = new AudioConnection(mixerR5, 0, sumR, 2);
         
         // Set initial mixer gains
         updateMixerGains();
         
         // Connect sum outputs to peak monitors
-        patchCordMonitorL = new AudioConnection(*drone.getLeftOutput(), 0, peakMonitorL, 0);
+        patchCordMonitorL = new AudioConnection(sumL, 0, peakMonitorL, 0);
         patchCordMonitorR = new AudioConnection(sumR, 0, peakMonitorR, 0);
         
-        // Final output to I2S (through peak monitors)
+        // Final output to I2S
         patchCordL = new AudioConnection(sumL, 0, i2s1, 0);
         patchCordR = new AudioConnection(sumR, 0, i2s1, 1);
     }
 
     ~HybridSynthesizer() {
-        for (int i = 0; i < 16; ++i) delete stringPatchCords[i];
+        delete stringPatchCordL;
+        delete stringPatchCordR;
         delete dronePatchCordL;
         delete dronePatchCordR;
         delete stringPadPatchCordL;
         delete stringPadPatchCordR;
         delete patchCordSumL1;
-        delete patchCordSumL2;
         delete patchCordSumL4;
         delete patchCordSumL5;
         delete patchCordSumR1;
-        delete patchCordSumR2;
         delete patchCordSumR4;
         delete patchCordSumR5;
         delete patchCordMonitorL;
@@ -272,16 +260,8 @@ public:
 
         switch (mode) {
             case PLUCKED_STRINGS:
-                // Stop string if it's playing this key
-                {
-                    auto it = keyToString.find(key);
-                    if (it != keyToString.end()) {
-                        int stringIndex = it->second;
-                        strings[stringIndex].noteOff();
-                        keyToString.erase(it);
-                        keyToBaseFreq.erase(key);
-                    }
-                }
+                // Delegate to StringsSynthesizer
+                strings.noteOff(key);
                 break;
             case DRONE:
                 drone.noteOff(key);
@@ -329,34 +309,22 @@ public:
 
     void setPitchBend(float bendAmount) {
         // bendAmount is in semitones
-        pitchBendFactor = pow(2.0f, bendAmount / 12.0f);
-        
-        // Apply bend to all active strings
-        for (const auto& pair : keyToString) {
-            int key = pair.first;
-            int stringIndex = pair.second;
-            float baseFreq = keyToBaseFreq[key];
-            strings[stringIndex].updateFrequency(baseFreq * pitchBendFactor);
-        }
+        // Delegate to StringsSynthesizer
+        strings.setPitchBend(bendAmount);
     }
 
     // String-specific controls (for backwards compatibility)
     void setAttenuation(uint16_t newAttenuation) {
-        for (int i = 0; i < 8; ++i) {
-            strings[i].setAttenuation(newAttenuation);
-        }
+        strings.setAttenuation(newAttenuation);
     }
 
     void setFilterStrength(uint16_t newStrength) {
-        for (int i = 0; i < 8; ++i) {
-            strings[i].setFilterStrength(newStrength);
-        }
+        strings.setFilterStrength(newStrength);
     }
     
     // Direct access to components
     KarplusStrongStringSynth& getString(int index) { 
-        if (index >= 0 && index < 8) return strings[index];
-        return strings[0]; // Return first string as fallback
+        return strings.getVoice(index);
     }
     
     // Peak monitoring methods
@@ -383,24 +351,9 @@ public:
 
 private:
     void playStringNote(int key, float freq, float velocity) {
-        // Find a free string (not in keyToString)
-        for (int i = 0; i < 8; ++i) {
-            bool inUse = false;
-            for (const auto& pair : keyToString) {
-                if (pair.second == i) {
-                    inUse = true;
-                    break;
-                }
-            }
-            if (!inUse) {
-                if(strings[i].noteOn(freq, velocity) == 0) {
-                    keyToString[key] = i;
-                    keyToBaseFreq[key] = freq;
-                }
-                return;
-            }
-        }
-        // No available string, could implement voice stealing here
+        // Delegate to StringsSynthesizer (it handles voice allocation internally)
+        // The freq parameter is ignored as StringsSynthesizer calculates it from MIDI note
+        strings.noteOn(key, velocity);
     }
     
     void updateMixerGains() {
@@ -408,13 +361,8 @@ private:
         float droneGain = masterVolume * droneVolume;
         float stringPadGain = masterVolume * stringPadVolume;
 
-        // Apply string gains
-        for (int i = 0; i < 4; ++i) {
-            mixerL1.gain(i, stringGain);
-            mixerR1.gain(i, stringGain);
-            mixerL2.gain(i, stringGain);
-            mixerR2.gain(i, stringGain);
-        }
+        // Apply string gains via StringsSynthesizer
+        strings.setVolume(stringGain);
         
         // Apply drone gains
         mixerL4.gain(0, droneGain);
@@ -424,15 +372,15 @@ private:
         mixerL5.gain(0, stringPadGain);
         mixerR5.gain(0, stringPadGain);
         
-        // Sum mixer gains
-        sumL.gain(0, 1.0f); // mixerL1
-        sumL.gain(1, 1.0f); // mixerL2
-        sumL.gain(2, 1.0f); // mixerL4
-        sumL.gain(3, 1.0f); // mixerL5
+        // Sum mixer gains (3 inputs now: strings, drone, string pads)
+        sumL.gain(0, 1.0f); // strings
+        sumL.gain(1, 1.0f); // drone
+        sumL.gain(2, 1.0f); // string pads
+        sumL.gain(3, 0.0f); // unused
         
-        sumR.gain(0, 1.0f); // mixerR1
-        sumR.gain(1, 1.0f); // mixerR2
-        sumR.gain(2, 1.0f); // mixerR4
-        sumR.gain(3, 1.0f); // mixerR5
+        sumR.gain(0, 1.0f); // strings
+        sumR.gain(1, 1.0f); // drone
+        sumR.gain(2, 1.0f); // string pads
+        sumR.gain(3, 0.0f); // unused
     }
 };
