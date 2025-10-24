@@ -12,6 +12,7 @@
 #include "DroneSynthesizer.h"
 #include "StringsSynthesizer.h"
 #include "StringPadSynthesizer.h"
+#include "SoundfontSynthesizer.h"
 
 class HybridSynthesizer {
 public:
@@ -19,6 +20,7 @@ public:
         PLUCKED_STRINGS,    // Karplus-Strong plucked strings (renamed from STRINGS_ONLY)
         DRONE,              // Analog-style drone synthesizer  
         STRING_PADS,        // Classic 80s string pads
+        SOUNDFONT,          // SoundFont (.sf2) synthesizer
         SPLIT,              // Split mode: drone below split point, string pads above
         IRAN                // Special mode for I Ran
     };
@@ -33,9 +35,13 @@ private:
     // String pad synthesizer
     StringPadSynthesizer stringPad;
     
+    // Soundfont synthesizer
+    SoundfontSynthesizer soundfont;
+    
     // Audio mixing and output
     AudioMixer4 mixerL4, mixerR4;  // Drone mixers
     AudioMixer4 mixerL5, mixerR5;  // String pad mixers
+    AudioMixer4 mixerL6, mixerR6;  // Soundfont mixers
     AudioMixer4 sumL, sumR;
     AudioPeakMonitor peakMonitorL, peakMonitorR;  // Peak monitors for left and right channels
     AudioOutputI2S i2s1;
@@ -47,8 +53,10 @@ private:
     AudioConnection* dronePatchCordR;      // Drone to mixer
     AudioConnection* stringPadPatchCordL;  // String pad to mixer
     AudioConnection* stringPadPatchCordR;  // String pad to mixer
-    AudioConnection* patchCordSumL1, *patchCordSumL4, *patchCordSumL5;
-    AudioConnection* patchCordSumR1, *patchCordSumR4, *patchCordSumR5;
+    AudioConnection* soundfontPatchCordL;  // Soundfont to mixer
+    AudioConnection* soundfontPatchCordR;  // Soundfont to mixer
+    AudioConnection* patchCordSumL1, *patchCordSumL4, *patchCordSumL5, *patchCordSumL6;
+    AudioConnection* patchCordSumR1, *patchCordSumR4, *patchCordSumR5, *patchCordSumR6;
     AudioConnection* patchCordMonitorL, *patchCordMonitorR;  // Connections to peak monitors
     AudioConnection* patchCordL;
     AudioConnection* patchCordR;
@@ -60,6 +68,7 @@ private:
     float stringVolume = 1.0f;
     float droneVolume = 1.0f;
     float stringPadVolume = 1.0f;
+    float soundfontVolume = 1.0f;
     
     SynthMode currentMode = IRAN; 
     uint8_t splitPoint = 48; // C3 
@@ -72,8 +81,10 @@ public:
         dronePatchCordR(nullptr),
         stringPadPatchCordL(nullptr),
         stringPadPatchCordR(nullptr),
-        patchCordSumL1(nullptr), patchCordSumL4(nullptr), patchCordSumL5(nullptr),
-        patchCordSumR1(nullptr), patchCordSumR4(nullptr), patchCordSumR5(nullptr),
+        soundfontPatchCordL(nullptr),
+        soundfontPatchCordR(nullptr),
+        patchCordSumL1(nullptr), patchCordSumL4(nullptr), patchCordSumL5(nullptr), patchCordSumL6(nullptr),
+        patchCordSumR1(nullptr), patchCordSumR4(nullptr), patchCordSumR5(nullptr), patchCordSumR6(nullptr),
         patchCordMonitorL(nullptr), patchCordMonitorR(nullptr),
         patchCordL(nullptr),
         patchCordR(nullptr)
@@ -90,12 +101,18 @@ public:
         stringPadPatchCordL = new AudioConnection(*stringPad.getOutput(), 0, mixerL5, 0);
         stringPadPatchCordR = new AudioConnection(*stringPad.getOutput(), 0, mixerR5, 0);
         
+        // Connect soundfont to mixerL6 and mixerR6 (mono to both channels)
+        soundfontPatchCordL = new AudioConnection(*soundfont.getLeftOutput(), 0, mixerL6, 0);
+        soundfontPatchCordR = new AudioConnection(*soundfont.getRightOutput(), 0, mixerR6, 0);
+        
         // Sum all mixers
         patchCordSumL1 = new AudioConnection(mixerL4, 0, sumL, 1);
         patchCordSumL4 = new AudioConnection(mixerL5, 0, sumL, 2);
+        patchCordSumL6 = new AudioConnection(mixerL6, 0, sumL, 3);
         
         patchCordSumR1 = new AudioConnection(mixerR4, 0, sumR, 1);
         patchCordSumR4 = new AudioConnection(mixerR5, 0, sumR, 2);
+        patchCordSumR6 = new AudioConnection(mixerR6, 0, sumR, 3);
         
         // Set initial mixer gains
         updateMixerGains();
@@ -116,12 +133,16 @@ public:
         delete dronePatchCordR;
         delete stringPadPatchCordL;
         delete stringPadPatchCordR;
+        delete soundfontPatchCordL;
+        delete soundfontPatchCordR;
         delete patchCordSumL1;
         delete patchCordSumL4;
         delete patchCordSumL5;
+        delete patchCordSumL6;
         delete patchCordSumR1;
         delete patchCordSumR4;
         delete patchCordSumR5;
+        delete patchCordSumR6;
         delete patchCordMonitorL;
         delete patchCordMonitorR;
         delete patchCordL;
@@ -168,6 +189,18 @@ public:
         updateMixerGains();
     }
     
+    void setSoundfontVolume(float volume) {
+        soundfontVolume = volume;
+        updateMixerGains();
+    }
+    
+    // Soundfont synthesizer access
+    SoundfontSynthesizer& getSoundfont() { return soundfont; }
+    bool initializeSoundfont() { return soundfont.begin(); }
+    bool loadSoundfontInstrument(const char* filename, int instrumentIndex) {
+        return soundfont.loadInstrument(filename, instrumentIndex);
+    }
+    
     // Synthesizer access
     DroneSynthesizer& getDrone() { return drone; }
     StringPadSynthesizer& getStringPad() { return stringPad; }
@@ -193,9 +226,12 @@ public:
             mode = STRING_PADS;
             break;
         case 5:
-            mode = SPLIT;
+            mode = SOUNDFONT;
             break;
         case 6:
+            mode = SPLIT;
+            break;
+        case 7:
             mode = IRAN;
             break;
         default:
@@ -217,6 +253,12 @@ public:
                 break;
             case STRING_PADS:
                 // Pass the current chord mode directly
+                stringPad.noteOn(key, velocity, StringPadSynthesizer::CHORD_MODE_OFF);
+                break;
+            case SOUNDFONT:
+                // Use soundfont synthesizer
+                soundfont.noteOn(key, velocity);
+                break;
                 stringPad.noteOn(key, velocity, StringPadSynthesizer::CHORD_MODE_OFF);
                 break;
             case SPLIT:
@@ -269,6 +311,9 @@ public:
             case STRING_PADS:
                 // Pass the current chord mode directly
                 stringPad.noteOff(key, StringPadSynthesizer::CHORD_MODE_OFF);
+                break;
+            case SOUNDFONT:
+                soundfont.noteOff(key);
                 break;
             case SPLIT:
                 // Split mode: drone below split point, string pads above
@@ -360,6 +405,7 @@ private:
         float stringGain = masterVolume * stringVolume;
         float droneGain = masterVolume * droneVolume;
         float stringPadGain = masterVolume * stringPadVolume;
+        float soundfontGain = masterVolume * soundfontVolume;
 
         // Apply string gains via StringsSynthesizer
         strings.setVolume(stringGain);
@@ -372,15 +418,19 @@ private:
         mixerL5.gain(0, stringPadGain);
         mixerR5.gain(0, stringPadGain);
         
-        // Sum mixer gains (3 inputs now: strings, drone, string pads)
+        // Apply soundfont gains
+        mixerL6.gain(0, soundfontGain);
+        mixerR6.gain(0, soundfontGain);
+        
+        // Sum mixer gains (4 inputs now: strings, drone, string pads, soundfont)
         sumL.gain(0, 1.0f); // strings
         sumL.gain(1, 1.0f); // drone
         sumL.gain(2, 1.0f); // string pads
-        sumL.gain(3, 0.0f); // unused
+        sumL.gain(3, 1.0f); // soundfont
         
         sumR.gain(0, 1.0f); // strings
         sumR.gain(1, 1.0f); // drone
         sumR.gain(2, 1.0f); // string pads
-        sumR.gain(3, 0.0f); // unused
+        sumR.gain(3, 1.0f); // soundfont
     }
 };
