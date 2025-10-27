@@ -28,9 +28,6 @@ public:
     void handleControlChange(byte channel, byte control, byte value);
     void handlePitchChange(byte channel, int bend);
     
-    // USB device information
-    void queryUSBDeviceInfo();
-    
 private:
     HybridSynthesizer& synth;
     USBHost& usbHost;

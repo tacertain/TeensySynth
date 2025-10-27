@@ -29,7 +29,6 @@ void setup()
     AudioMemory(20); // Memory for audio processing
 
     Serial.println("Hello, world!");
-    Serial8.begin(400000, SERIAL_8N1);
 
 #ifdef TFT_DISPLAY
     // Initialize TFT Display
@@ -40,7 +39,6 @@ void setup()
 #else
     Serial.println("Running without TFT display - audio functionality will work normally");
 #endif
-    midiController.queryUSBDeviceInfo();
     Serial.println("Setup complete - ready for input");
 }
 

@@ -259,8 +259,6 @@ public:
                 // Use soundfont synthesizer
                 soundfont.noteOn(key, velocity);
                 break;
-                stringPad.noteOn(key, velocity, StringPadSynthesizer::CHORD_MODE_OFF);
-                break;
             case SPLIT:
                 // Split mode: drone below split point, string pads above
                 if (key < splitPoint)
