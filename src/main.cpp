@@ -29,6 +29,19 @@ void setup()
     AudioMemory(20); // Memory for audio processing
 
     Serial.println("Hello, world!");
+    AudioControlSGTL5000 audioShield;
+    audioShield.enable();
+    audioShield.volume(0.9);
+    // Initialize soundfont synthesizer
+    if (synth.initializeSoundfont()) {
+        Serial.println("Soundfont synthesizer initialized successfully");
+    } else {
+        Serial.println("Warning: Soundfont synthesizer initialization failed");
+    }
+    Serial.println("Switching to Soundfont mode");
+    synth.setSynthMode(HybridSynthesizer::SOUNDFONT);
+    Serial.println("Mode switched to SOUNDFONT, attempting to load trombone.sf2...");
+    bool success = synth.getSoundfont().loadInstrument("trombone.sf2", 0);
 
 #ifdef TFT_DISPLAY
     // Initialize TFT Display

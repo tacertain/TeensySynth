@@ -38,14 +38,8 @@ Connect a MIDI controller or DAW for real-time parameter control:
 #### Mode Switching (Channel 1)
 - **CC 51** (value 127): Switch to Plucked Strings
 - **CC 52** (value 127): Switch to Drone mode
-
-#### String Pad Mode + Preset Selection (Channel 1)
-*Each CC both switches to String Pads mode AND loads the specified preset:*
-- **CC 53** (value 127): String Pads + **"Lush Pads"** preset
-- **CC 54** (value 127): String Pads + **"Bright Strings"** preset  
-- **CC 55** (value 127): String Pads + **"Soft Ensemble"** preset
-- **CC 56** (value 127): String Pads + **"Analog Warmth"** preset
-- **CC 57** (value 127): String Pads + **"Shimmer"** preset
+- **CC 53** (value 127): String Pads + **"Bright Strings"** preset  
+- **CC 54** (value 127): Switch to Soundfont mode and load "trumpet.sf2" 
 
 #### Volume Controls (Channel 1)
 - **CC 7**: Master Volume (0-127) - Controls overall output level

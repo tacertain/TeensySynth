@@ -191,39 +191,24 @@ void MIDIController::handleControlChange(byte channel, byte control, byte value)
     }
     
     // String Pad Mode with Presets (CC 53-57) - Switch to String Pads and load preset
-    if (channel == 1 && control == 53 && value == 127) // CC 53 - String Pads: Lush Pads
-    {
-        synth.setSynthMode(HybridSynthesizer::STRING_PADS);
-        synth.getStringPad().loadPreset(StringPadSynthesizer::PRESET_LUSH_PADS);
-        Serial.println("Mode: STRING_PADS + Lush Pads preset (CC 53)");
-    }
-    
-    if (channel == 1 && control == 54 && value == 127) // CC 54 - String Pads: Bright Strings
+    if (channel == 1 && control == 53 && value == 127) // CC 53 - String Pads: Bright Strings
     {
         synth.setSynthMode(HybridSynthesizer::STRING_PADS);
         synth.getStringPad().loadPreset(StringPadSynthesizer::PRESET_BRIGHT_STRINGS);
-        Serial.println("Mode: STRING_PADS + Bright Strings preset (CC 54)");
+        Serial.println("Mode: STRING_PADS + Bright Strings preset (CC 53)");
     }
     
-    if (channel == 1 && control == 55 && value == 127) // CC 55 - String Pads: Soft Ensemble
+    if (channel == 1 && control == 54 && value == 127) // CC 54 - Soundfont mode: trumpet.sf2
     {
-        synth.setSynthMode(HybridSynthesizer::STRING_PADS);
-        synth.getStringPad().loadPreset(StringPadSynthesizer::PRESET_SOFT_ENSEMBLE);
-        Serial.println("Mode: STRING_PADS + Soft Ensemble preset (CC 55)");
-    }
-    
-    if (channel == 1 && control == 56 && value == 127) // CC 56 - String Pads: Analog Warmth
-    {
-        synth.setSynthMode(HybridSynthesizer::STRING_PADS);
-        synth.getStringPad().loadPreset(StringPadSynthesizer::PRESET_ANALOG_WARMTH);
-        Serial.println("Mode: STRING_PADS + Analog Warmth preset (CC 56)");
-    }
-    
-    if (channel == 1 && control == 57 && value == 127) // CC 57 - String Pads: Shimmer
-    {
-        synth.setSynthMode(HybridSynthesizer::STRING_PADS);
-        synth.getStringPad().loadPreset(StringPadSynthesizer::PRESET_SHIMMER);
-        Serial.println("Mode: STRING_PADS + Shimmer preset (CC 57)");
+        Serial.println("CC 54 triggered - Switching to Soundfont mode");
+        synth.setSynthMode(HybridSynthesizer::SOUNDFONT);
+        Serial.println("Mode switched to SOUNDFONT, attempting to load trumpet.sf2...");
+        bool success = synth.getSoundfont().loadInstrument("trombone.sf2", 0);
+        if (success) {
+            Serial.println("Mode: SOUNDFONT + trumpet.sf2 (CC 54) - SUCCESS");
+        } else {
+            Serial.println("Mode: SOUNDFONT + trumpet.sf2 (CC 54) - FAILED");
+        }
     }
     
     if (channel == 1 && control == 58 && value == 127) // CC 58 - Split Mode
