@@ -198,19 +198,85 @@ void MIDIController::handleControlChange(byte channel, byte control, byte value)
         Serial.println("Mode: STRING_PADS + Bright Strings preset (CC 53)");
     }
     
-    if (channel == 1 && control == 54 && value == 127) // CC 54 - Soundfont mode: trumpet.sf2
+    if (channel == 1 && control == 54 && value == 127) // CC 54 - Soundfont mode: trombone.sf2
     {
         Serial.println("CC 54 triggered - Switching to Soundfont mode");
         synth.setSynthMode(HybridSynthesizer::SOUNDFONT);
-        Serial.println("Mode switched to SOUNDFONT, attempting to load trumpet.sf2...");
-        bool success = synth.getSoundfont().loadInstrument("trombone.sf2", 0);
-        if (success) {
-            Serial.println("Mode: SOUNDFONT + trumpet.sf2 (CC 54) - SUCCESS");
-        } else {
-            Serial.println("Mode: SOUNDFONT + trumpet.sf2 (CC 54) - FAILED");
+        
+        // Always unload all instruments and load fresh
+        Serial.println("Unloading all instruments...");
+        for (int i = 0; i < 4; i++) {  // MAX_INSTRUMENTS = 4
+            synth.getSoundfont().unloadInstrument(i);
         }
+        
+        Serial.println("Mode switched to SOUNDFONT, loading trombone.sf2...");
+        bool success = synth.getSoundfont().loadInstrument(0, "trombone.sf2", 0);  // Load into slot 0
+        if (success) {
+            Serial.println("Mode: SOUNDFONT + trombone.sf2 (CC 54) - SUCCESS");
+        } else {
+            Serial.println("Mode: SOUNDFONT + trombone.sf2 (CC 54) - FAILED");
+        }
+        synth.setDefaultInstrument(0);
     }
     
+    if (channel == 1 && control == 55 && value == 127) // CC 55 - TUSK mode
+    {
+        Serial.println("CC 55 triggered - Switching to TUSK mode");
+        synth.setSynthMode(HybridSynthesizer::TUSK);
+        synth.setSplitPoint(60);
+        Serial.println("Mode: TUSK - Soundfont split mode (instrument 0 above split, instrument 1 below) (CC 55)");
+
+        synth.loadTuskInstruments();
+    }
+
+    if (channel == 1 && control == 56 && value == 127) // CC 56 - Soundfont mode: trombone_tusk.sf2
+    {
+        Serial.println("CC 56 triggered - Switching to Soundfont mode");
+        synth.setSynthMode(HybridSynthesizer::SOUNDFONT);
+        
+        // Always unload all instruments and load fresh
+        Serial.println("Unloading all instruments...");
+        for (int i = 0; i < 4; i++) {  // MAX_INSTRUMENTS = 4
+            synth.getSoundfont().unloadInstrument(i);
+        }
+        
+        Serial.println("Mode switched to SOUNDFONT, loading trombone_tusk.sf2...");
+        bool success = synth.getSoundfont().loadInstrument(1, "trombone_tusk.sf2", 0); // Load into slot 1
+        if (success)
+        {
+            Serial.println("Mode: SOUNDFONT + trombone_tusk.sf2 (CC 56) - SUCCESS");
+        }
+        else
+        {
+            Serial.println("Mode: SOUNDFONT + trombone_tusk.sf2 (CC 56) - FAILED");
+        }
+        synth.setDefaultInstrument(1);
+    }
+
+    if (channel == 1 && control == 57 && value == 127) // CC 57 - Soundfont mode: trumpet_tusk.sf2
+    {
+        Serial.println("CC 57 triggered - Switching to Soundfont mode");
+        synth.setSynthMode(HybridSynthesizer::SOUNDFONT);
+        
+        // Always unload all instruments and load fresh
+        Serial.println("Unloading all instruments...");
+        for (int i = 0; i < 4; i++) {  // MAX_INSTRUMENTS = 4
+            synth.getSoundfont().unloadInstrument(i);
+        }
+        
+        Serial.println("Mode switched to SOUNDFONT, loading trumpet_tusk.sf2...");
+        bool success = synth.getSoundfont().loadInstrument(0, "trumpet_tusk.sf2", 0); // Load into slot 0
+        if (success)
+        {
+            Serial.println("Mode: SOUNDFONT + trumpet_tusk.sf2 (CC 57) - SUCCESS");
+        }
+        else
+        {
+            Serial.println("Mode: SOUNDFONT + trumpet_tusk.sf2 (CC 57) - FAILED");
+        }
+        synth.setDefaultInstrument(0);
+    }
+
     if (channel == 1 && control == 58 && value == 127) // CC 58 - Split Mode
     {
         synth.setSynthMode(HybridSynthesizer::SPLIT);

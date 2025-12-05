@@ -4,16 +4,22 @@
 SoundfontSynthesizer::SoundfontSynthesizer()
     : mixerConnection(nullptr)
     , mixer2Connection(nullptr)
-    , instrumentData(nullptr)
     , initialized(false)
-    , instrumentLoaded(false)
     , volume(1.0f)
 {
-    currentInstrumentName[0] = '\0';
+    // Initialize instrument slots
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        instruments[i].data = nullptr;
+        instruments[i].loaded = false;
+        instruments[i].name[0] = '\0';
+        instruments[i].filename[0] = '\0';
+        instruments[i].instrumentIndex = -1;
+    }
     
     // Initialize voice states
     for (int i = 0; i < MAX_VOICES; ++i) {
         voiceStates[i].active = false;
+        voiceStates[i].instrumentSlot = -1;
         voiceStates[i].midiNote = -1;
         voiceStates[i].noteOnTime = 0;
     }
@@ -45,15 +51,16 @@ SoundfontSynthesizer::~SoundfontSynthesizer() {
     delete mixer2Connection;
     
     // Clean up instrument data
-    if (instrumentData != nullptr) {
-        delete instrumentData;
-        instrumentData = nullptr;
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        if (instruments[i].data != nullptr) {
+            delete instruments[i].data;
+            instruments[i].data = nullptr;
+        }
     }
 }
 
 bool SoundfontSynthesizer::begin() {
     if (initialized) {
-        Serial.println("SoundfontSynthesizer: Already initialized");
         return true;
     }
     
@@ -65,39 +72,41 @@ bool SoundfontSynthesizer::begin() {
         return false;
     }
     
-    Serial.println("SoundfontSynthesizer: SD card initialized successfully");
-    
     // Test SD card read access
     File testFile = SD.open("/");
     if (!testFile) {
-        Serial.println("SoundfontSynthesizer: WARNING - Cannot open SD root directory!");
+        Serial.println("SoundfontSynthesizer: Cannot open SD root directory!");
         return false;
     }
     testFile.close();
-    Serial.println("SoundfontSynthesizer: SD card read access confirmed");
     
     initialized = true;
     Serial.println("SoundfontSynthesizer: Initialized");
     return true;
 }
 
-bool SoundfontSynthesizer::loadInstrument(const char* filename, int instrumentIndex) {
+bool SoundfontSynthesizer::loadInstrument(int instrumentSlot, const char* filename, int instrumentIndex) {
     if (!initialized) {
         Serial.println("SoundfontSynthesizer: Not initialized! Call begin() first.");
         return false;
     }
     
-    Serial.print("SoundfontSynthesizer: Loading instrument ");
+    if (instrumentSlot < 0 || instrumentSlot >= MAX_INSTRUMENTS) {
+        Serial.println("SoundfontSynthesizer: Invalid instrument slot");
+        return false;
+    }
+    
+    Serial.print("SoundfontSynthesizer: Loading ");
+    Serial.print(filename);
+    Serial.print("[");
     Serial.print(instrumentIndex);
-    Serial.print(" from ");
-    Serial.println(filename);
+    Serial.print("] into slot ");
+    Serial.println(instrumentSlot);
     
     // Ensure filename starts with "/" for SD library compatibility
     char fullPath[256];
     if (filename[0] != '/') {
         snprintf(fullPath, sizeof(fullPath), "/%s", filename);
-        Serial.print("SoundfontSynthesizer: Adjusted path to: ");
-        Serial.println(fullPath);
     } else {
         strncpy(fullPath, filename, sizeof(fullPath) - 1);
         fullPath[sizeof(fullPath) - 1] = '\0';  // Ensure null termination
@@ -105,99 +114,48 @@ bool SoundfontSynthesizer::loadInstrument(const char* filename, int instrumentIn
     
     // Check if file exists
     if (!SD.exists(fullPath)) {
-        Serial.print("SoundfontSynthesizer: ERROR - File does not exist: ");
+        Serial.print("SoundfontSynthesizer: File not found: ");
         Serial.println(fullPath);
-        Serial.println("Listing SD card root directory:");
-        File root = SD.open("/");
-        if (root) {
-            while (true) {
-                File entry = root.openNextFile();
-                if (!entry) break;
-                Serial.print("  ");
-                Serial.print(entry.name());
-                if (entry.isDirectory()) {
-                    Serial.println("/");
-                } else {
-                    Serial.print(" (");
-                    Serial.print(entry.size());
-                    Serial.println(" bytes)");
-                }
-                entry.close();
-            }
-            root.close();
-        }
         return false;
     }
-    
-    // Get file size for diagnostics
-    File sf2File = SD.open(fullPath);
-    if (sf2File) {
-        size_t fileSize = sf2File.size();
-        Serial.print("SoundfontSynthesizer: File exists, size: ");
-        Serial.print(fileSize);
-        Serial.println(" bytes");
-        
-        // Warn about large files
-        if (fileSize > 5000000) {
-            Serial.println("SoundfontSynthesizer: WARNING - File is very large (>5MB)");
-            Serial.println("  Large soundfonts may fail due to memory constraints.");
-            Serial.println("  Consider using a smaller, simpler SF2 file.");
-        }
-        
-        // Read first 4 bytes to check for RIFF header
-        if (fileSize >= 4) {
-            char header[5] = {0};
-            sf2File.read(header, 4);
-            Serial.print("SoundfontSynthesizer: File header: ");
-            Serial.println(header);
-            if (strncmp(header, "RIFF", 4) != 0) {
-                Serial.println("SoundfontSynthesizer: WARNING - File does not have RIFF header!");
-                Serial.println("  This may not be a valid SF2 file.");
-            }
-        }
-        sf2File.close();
-    }
-    
-    Serial.println("SoundfontSynthesizer: Attempting to load...");
-    
-    // Test if we can manually open the file one more time as a final check
-    File verifyFile = SD.open(fullPath);
-    if (!verifyFile) {
-        Serial.println("SoundfontSynthesizer: ERROR - Cannot open file for reading!");
-        return false;
-    }
-    Serial.print("SoundfontSynthesizer: File opened successfully, readable bytes: ");
-    Serial.println(verifyFile.available());
-    verifyFile.close();
     
     // Store old instrument data to delete after switching
-    AudioSynthWavetable::instrument_data* oldInstrument = instrumentData;
+    AudioSynthWavetable::instrument_data* oldInstrument = instruments[instrumentSlot].data;
     
-    // Load new instrument
-    Serial.println("SoundfontSynthesizer: Calling sf22aswt.Load_instrument_from_file...");
-    Serial.println("SoundfontSynthesizer: (This may take several seconds...)");
-    
-    if (!sf22aswt.Load_instrument_from_file(fullPath, instrumentIndex, &instrumentData)) {
-        Serial.println("SoundfontSynthesizer: ERROR - sf22aswt.Load_instrument_from_file returned false!");
-        Serial.print("  Filename: ");
-        Serial.println(fullPath);
-        Serial.print("  Instrument index: ");
-        Serial.println(instrumentIndex);
-        Serial.println();
-        Serial.println("Troubleshooting suggestions:");
-        Serial.println("  1. Try a smaller SF2 file (<1MB recommended)");
-        Serial.println("  2. Use a single-instrument SF2 file");
-        Serial.println("  3. Try converting the SF2 to a simpler format");
-        Serial.println("  4. Check if the instrument index is valid (try index 0)");
-        Serial.println("  5. Increase AudioMemory() in main.cpp if memory errors occur");
-        return false;
+    // Check if we can clone from an existing reader with the same file
+    int sourceSlot = -1;
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        if (i != instrumentSlot && instruments[i].loaded && 
+            strcmp(instruments[i].filename, fullPath) == 0) {
+            sourceSlot = i;
+            Serial.print("SoundfontSynthesizer: Found existing file in slot ");
+            Serial.print(i);
+            Serial.println(", cloning reader...");
+            break;
+        }
     }
     
-    Serial.println("SoundfontSynthesizer: sf22aswt loaded successfully");
+    bool success = false;
+    if (sourceSlot != -1) {
+        // Clone from existing reader
+        if (sf22aswt_readers[sourceSlot].CloneInto(sf22aswt_readers[instrumentSlot])) {
+            success = sf22aswt_readers[instrumentSlot].Load_instrument(instrumentIndex, instruments[instrumentSlot].data);
+        } else {
+            Serial.println("SoundfontSynthesizer: Failed to clone reader");
+        }
+    } else {
+        // Read file fresh
+        Serial.println("SoundfontSynthesizer: Reading file fresh...");
+        if (sf22aswt_readers[instrumentSlot].ReadFile(fullPath)) {
+            success = sf22aswt_readers[instrumentSlot].Load_instrument(instrumentIndex, instruments[instrumentSlot].data);
+        } else {
+            Serial.println("SoundfontSynthesizer: Failed to read SF2 file");
+        }
+    }
     
-    // Set the instrument on all voices
-    for (int i = 0; i < MAX_VOICES; ++i) {
-        voices[i].setInstrument(*instrumentData);
+    if (!success) {
+        Serial.println("SoundfontSynthesizer: Failed to load instrument");
+        return false;
     }
     
     // Clean up old instrument data
@@ -205,25 +163,39 @@ bool SoundfontSynthesizer::loadInstrument(const char* filename, int instrumentIn
         delete oldInstrument;
     }
     
-    // Store instrument name
-    snprintf(currentInstrumentName, sizeof(currentInstrumentName), "%s[%d]", filename, instrumentIndex);
-    instrumentLoaded = true;
+    // Store instrument metadata and mark as loaded
+    snprintf(instruments[instrumentSlot].name, sizeof(instruments[instrumentSlot].name), "%s[%d]", filename, instrumentIndex);
+    strncpy(instruments[instrumentSlot].filename, fullPath, sizeof(instruments[instrumentSlot].filename) - 1);
+    instruments[instrumentSlot].filename[sizeof(instruments[instrumentSlot].filename) - 1] = '\0';
+    instruments[instrumentSlot].instrumentIndex = instrumentIndex;
+    instruments[instrumentSlot].loaded = true;
     
     Serial.println("SoundfontSynthesizer: Instrument loaded successfully");
     return true;
 }
 
-bool SoundfontSynthesizer::isInstrumentLoaded() const {
-    return instrumentLoaded;
+bool SoundfontSynthesizer::isInstrumentLoaded(int instrumentSlot) const {
+    if (instrumentSlot < 0 || instrumentSlot >= MAX_INSTRUMENTS) {
+        return false;
+    }
+    return instruments[instrumentSlot].loaded;
 }
 
-const char* SoundfontSynthesizer::getCurrentInstrumentName() const {
-    return currentInstrumentName;
+const char* SoundfontSynthesizer::getInstrumentName(int instrumentSlot) const {
+    if (instrumentSlot < 0 || instrumentSlot >= MAX_INSTRUMENTS) {
+        return "";
+    }
+    return instruments[instrumentSlot].name;
 }
 
-void SoundfontSynthesizer::noteOn(int midiNote, float velocity) {
-    if (!instrumentLoaded) {
-        Serial.println("SoundfontSynthesizer: No instrument loaded!");
+void SoundfontSynthesizer::unloadInstrument(int instrumentSlot) {
+    Serial.print("SoundfontSynthesizer: Unloading instrument from slot ");
+    Serial.println(instrumentSlot);
+    clearInstrumentSlot(instrumentSlot);
+}
+
+void SoundfontSynthesizer::noteOn(int instrumentSlot, int midiNote, float velocity) {
+    if (instrumentSlot < 0 || instrumentSlot >= MAX_INSTRUMENTS || !instruments[instrumentSlot].loaded) {
         return;
     }
     
@@ -235,6 +207,9 @@ void SoundfontSynthesizer::noteOn(int midiNote, float velocity) {
         voices[voiceIndex].stop();
     }
     
+    // Set the instrument on this voice
+    voices[voiceIndex].setInstrument(*instruments[instrumentSlot].data);
+    
     // Convert velocity to 0-127 range for AudioSynthWavetable
     int vel = constrain(velocity * 127.0f, 0, 127);
     
@@ -243,39 +218,31 @@ void SoundfontSynthesizer::noteOn(int midiNote, float velocity) {
     
     // Update voice state
     voiceStates[voiceIndex].active = true;
+    voiceStates[voiceIndex].instrumentSlot = instrumentSlot;
     voiceStates[voiceIndex].midiNote = midiNote;
     voiceStates[voiceIndex].noteOnTime = millis();
-    
-    Serial.print("SoundfontSynthesizer: Note ON - MIDI: ");
-    Serial.print(midiNote);
-    Serial.print(", velocity: ");
-    Serial.print(vel);
-    Serial.print(", voice: ");
-    Serial.println(voiceIndex);
 }
 
-void SoundfontSynthesizer::noteOff(int midiNote) {
-    // Find the voice playing this note
-    int voiceIndex = findVoicePlayingNote(midiNote);
+void SoundfontSynthesizer::noteOff(int instrumentSlot, int midiNote) {
+    // Find the voice playing this note for this instrument
+    int voiceIndex = findVoicePlayingNote(instrumentSlot, midiNote);
     if (voiceIndex != -1) {
         voices[voiceIndex].stop();
         voiceStates[voiceIndex].active = false;
+        voiceStates[voiceIndex].instrumentSlot = -1;
         voiceStates[voiceIndex].midiNote = -1;
-        
-        Serial.print("SoundfontSynthesizer: Note OFF - MIDI: ");
-        Serial.print(midiNote);
-        Serial.print(", voice: ");
-        Serial.println(voiceIndex);
     }
 }
 
-void SoundfontSynthesizer::allNotesOff() {
+void SoundfontSynthesizer::allNotesOff(int instrumentSlot) {
     for (int i = 0; i < MAX_VOICES; ++i) {
-        voices[i].stop();
-        voiceStates[i].active = false;
-        voiceStates[i].midiNote = -1;
+        if (instrumentSlot == -1 || voiceStates[i].instrumentSlot == instrumentSlot) {
+            voices[i].stop();
+            voiceStates[i].active = false;
+            voiceStates[i].instrumentSlot = -1;
+            voiceStates[i].midiNote = -1;
+        }
     }
-    Serial.println("SoundfontSynthesizer: All notes off");
 }
 
 int SoundfontSynthesizer::getActiveVoiceCount() const {
@@ -321,9 +288,11 @@ int SoundfontSynthesizer::findAvailableVoice() {
     return -1;  // No available voice
 }
 
-int SoundfontSynthesizer::findVoicePlayingNote(int midiNote) {
+int SoundfontSynthesizer::findVoicePlayingNote(int instrumentSlot, int midiNote) {
     for (int i = 0; i < MAX_VOICES; ++i) {
-        if (voiceStates[i].active && voiceStates[i].midiNote == midiNote) {
+        if (voiceStates[i].active && 
+            voiceStates[i].instrumentSlot == instrumentSlot && 
+            voiceStates[i].midiNote == midiNote) {
             return i;
         }
     }
@@ -355,4 +324,25 @@ void SoundfontSynthesizer::updateMixerGains() {
     finalMixer.gain(1, 1.0f);
     finalMixer.gain(2, 0.0f);
     finalMixer.gain(3, 0.0f);
+}
+
+void SoundfontSynthesizer::clearInstrumentSlot(int instrumentSlot) {
+    if (instrumentSlot < 0 || instrumentSlot >= MAX_INSTRUMENTS) {
+        return;
+    }
+    
+    // Stop any voices using this instrument
+    allNotesOff(instrumentSlot);
+    
+    // Clean up instrument data
+    if (instruments[instrumentSlot].data != nullptr) {
+        delete instruments[instrumentSlot].data;
+        instruments[instrumentSlot].data = nullptr;
+    }
+    
+    // Clear metadata
+    instruments[instrumentSlot].loaded = false;
+    instruments[instrumentSlot].name[0] = '\0';
+    instruments[instrumentSlot].filename[0] = '\0';
+    instruments[instrumentSlot].instrumentIndex = -1;
 }

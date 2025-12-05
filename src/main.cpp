@@ -38,10 +38,7 @@ void setup()
     } else {
         Serial.println("Warning: Soundfont synthesizer initialization failed");
     }
-    Serial.println("Switching to Soundfont mode");
-    synth.setSynthMode(HybridSynthesizer::SOUNDFONT);
-    Serial.println("Mode switched to SOUNDFONT, attempting to load trombone.sf2...");
-    bool success = synth.getSoundfont().loadInstrument("trombone.sf2", 0);
+    synth.loadTuskInstruments();
 
 #ifdef TFT_DISPLAY
     // Initialize TFT Display

@@ -22,7 +22,8 @@ public:
         STRING_PADS,        // Classic 80s string pads
         SOUNDFONT,          // SoundFont (.sf2) synthesizer
         SPLIT,              // Split mode: drone below split point, string pads above
-        IRAN                // Special mode for I Ran
+        IRAN,               // Special mode for I Ran
+        TUSK                // Soundfont split mode: instrument 0 above split, instrument 1 below
     };
 
 private:
@@ -45,7 +46,10 @@ private:
     AudioMixer4 sumL, sumR;
     AudioPeakMonitor peakMonitorL, peakMonitorR;  // Peak monitors for left and right channels
     AudioOutputI2S i2s1;
-    
+#ifdef USB_AUDIO
+    AudioOutputUSB usb2;
+#endif
+
     // Audio connections
     AudioConnection* stringPatchCordL;     // Strings to mixer L
     AudioConnection* stringPatchCordR;     // Strings to mixer R
@@ -60,7 +64,9 @@ private:
     AudioConnection* patchCordMonitorL, *patchCordMonitorR;  // Connections to peak monitors
     AudioConnection* patchCordL;
     AudioConnection* patchCordR;
-
+    AudioConnection *patchCordUsbL;
+    AudioConnection *patchCordUsbR;
+#
     std::map<int, int> keyToString; // key -> string index (deprecated - managed internally now)
     std::map<int, float> keyToBaseFreq; // key -> base frequency (deprecated - managed internally now)
     float pitchBendFactor = 1.0f; // Current pitch bend multiplier (deprecated - managed internally now)
@@ -70,8 +76,9 @@ private:
     float stringPadVolume = 1.0f;
     float soundfontVolume = 1.0f;
     
-    SynthMode currentMode = IRAN; 
-    uint8_t splitPoint = 48; // C3 
+    SynthMode currentMode = TUSK; 
+    uint8_t splitPoint = 60; // C4
+    int defaultInstrument = 0; // Default instrument slot for SOUNDFONT mode 
 
 public:
     HybridSynthesizer() :
@@ -87,7 +94,9 @@ public:
         patchCordSumR1(nullptr), patchCordSumR4(nullptr), patchCordSumR5(nullptr), patchCordSumR6(nullptr),
         patchCordMonitorL(nullptr), patchCordMonitorR(nullptr),
         patchCordL(nullptr),
-        patchCordR(nullptr)
+        patchCordR(nullptr),
+        patchCordUsbL(nullptr),
+        patchCordUsbR(nullptr)
     {
         // Connect strings to sum mixers
         stringPatchCordL = new AudioConnection(*strings.getLeftOutput(), 0, sumL, 0);
@@ -124,6 +133,11 @@ public:
         // Final output to I2S
         patchCordL = new AudioConnection(sumL, 0, i2s1, 0);
         patchCordR = new AudioConnection(sumR, 0, i2s1, 1);
+
+#ifdef USB_AUDIO
+        patchCordUsbL = new AudioConnection(sumL, 0, usb2, 0);
+        patchCordUsbR = new AudioConnection(sumR, 0, usb2, 1);
+#endif
     }
 
     ~HybridSynthesizer() {
@@ -147,14 +161,16 @@ public:
         delete patchCordMonitorR;
         delete patchCordL;
         delete patchCordR;
+        delete patchCordUsbL;
+        delete patchCordUsbR;
     }
     
     // Synthesis mode control
     void setSynthMode(SynthMode mode) { 
         // Print current peak levels before switching modes
-        const char* modeNames[] = {"PLUCKED_STRINGS", "DRONE", "STRING_PADS", "SPLIT"};
-        const char* currentModeName = (currentMode >= 0 && currentMode < 4) ? modeNames[currentMode] : "UNKNOWN";
-        const char* newModeName = (mode >= 0 && mode < 4) ? modeNames[mode] : "UNKNOWN";
+        const char* modeNames[] = {"PLUCKED_STRINGS", "DRONE", "STRING_PADS", "SOUNDFONT", "SPLIT", "IRAN", "TUSK"};
+        const char* currentModeName = (currentMode >= 0 && currentMode < 7) ? modeNames[currentMode] : "UNKNOWN";
+        const char* newModeName = (mode >= 0 && mode < 7) ? modeNames[mode] : "UNKNOWN";
         
         Serial.print("Switching from ");
         Serial.print(currentModeName);
@@ -168,6 +184,7 @@ public:
     }
     
     void setSplitPoint(uint8_t note) { splitPoint = note; }
+    void setDefaultInstrument(int instrumentSlot) { defaultInstrument = instrumentSlot; }
     
     // Volume controls
     void setMasterVolume(float volume) {
@@ -197,8 +214,31 @@ public:
     // Soundfont synthesizer access
     SoundfontSynthesizer& getSoundfont() { return soundfont; }
     bool initializeSoundfont() { return soundfont.begin(); }
-    bool loadSoundfontInstrument(const char* filename, int instrumentIndex) {
-        return soundfont.loadInstrument(filename, instrumentIndex);
+    bool loadSoundfontInstrument(int instrumentSlot, const char* filename, int instrumentIndex) {
+        return soundfont.loadInstrument(instrumentSlot, filename, instrumentIndex);
+    }
+    void loadTuskInstruments() {
+        // Always unload all instruments and load fresh
+        Serial.println("Unloading all instruments...");
+        for (int i = 0; i < 4; i++) {
+            soundfont.unloadInstrument(i);
+        }
+
+        // Load instrument 0 from trombone_tusk.sf2 into slot 1
+        bool success1 = soundfont.loadInstrument(1, "trombone_tusk.sf2", 0);
+        if (success1) {
+            Serial.println("Instrument 0 from trombone_tusk.sf2 loaded successfully into slot 1");
+        } else {
+            Serial.println("Failed to load instrument 0 from trombone_tusk.sf2 into slot 1");
+        }
+
+        // Load instrument 0 from trumpet_tusk.sf2 into slot 0
+        bool success2 = soundfont.loadInstrument(0, "trumpet_tusk.sf2", 0);
+        if (success2) {
+            Serial.println("Instrument 0 from trumpet_tusk.sf2 loaded successfully into slot 0");
+        } else {
+            Serial.println("Failed to load instrument 0 from trumpet_tusk.sf2 into slot 0");
+        }
     }
     
     // Synthesizer access
@@ -234,6 +274,9 @@ public:
         case 7:
             mode = IRAN;
             break;
+        case 8:
+            mode = TUSK;
+            break;
         default:
             break;
         }
@@ -256,8 +299,8 @@ public:
                 stringPad.noteOn(key, velocity, StringPadSynthesizer::CHORD_MODE_OFF);
                 break;
             case SOUNDFONT:
-                // Use soundfont synthesizer
-                soundfont.noteOn(key, velocity);
+                // Use soundfont synthesizer with configurable default instrument
+                soundfont.noteOn(defaultInstrument, key, velocity);
                 break;
             case SPLIT:
                 // Split mode: drone below split point, string pads above
@@ -292,6 +335,16 @@ public:
                     stringPad.noteOn(key, 1.0f, chordMode);
                 }
                 break;
+            case TUSK:
+                if (key < splitPoint)
+                {
+                    soundfont.noteOn(1, key + 12, velocity); // Instrument 1 below split point
+                }
+                else
+                {
+                    soundfont.noteOn(0, key, velocity); // Instrument 1 below split point
+                }
+                break;
             }
     }
 
@@ -311,7 +364,7 @@ public:
                 stringPad.noteOff(key, StringPadSynthesizer::CHORD_MODE_OFF);
                 break;
             case SOUNDFONT:
-                soundfont.noteOff(key);
+                soundfont.noteOff(defaultInstrument, key);  // Use configurable default instrument
                 break;
             case SPLIT:
                 // Split mode: drone below split point, string pads above
@@ -345,6 +398,17 @@ public:
                     }
                     key += 24;
                     stringPad.noteOff(key, chordMode);
+                }
+                break;
+            case TUSK:
+                // TUSK mode: instrument 0 above split point, instrument 1 below
+                if (key < splitPoint)
+                {
+                    soundfont.noteOff(1, key + 12);  // Instrument 1 below split point
+                }
+                else
+                {
+                    soundfont.noteOff(0, key);  // Instrument 0 above split point
                 }
                 break;
             }

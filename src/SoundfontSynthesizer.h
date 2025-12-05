@@ -13,6 +13,7 @@
  * with the Teensy AudioSynthWavetable.
  * 
  * Features:
+ * - Multiple instrument support (up to MAX_INSTRUMENTS)
  * - Polyphonic playback with multiple voices
  * - Dynamic instrument loading from SD card
  * - Stereo output
@@ -25,14 +26,15 @@ public:
 
     // Initialization
     bool begin();  // Initialize SD card and prepare for loading
-    bool loadInstrument(const char* filename, int instrumentIndex);
-    bool isInstrumentLoaded() const;
-    const char* getCurrentInstrumentName() const;
+    bool loadInstrument(int instrumentSlot, const char* filename, int instrumentIndex);
+    bool isInstrumentLoaded(int instrumentSlot) const;
+    const char* getInstrumentName(int instrumentSlot) const;
+    void unloadInstrument(int instrumentSlot);  // Unload instrument and free memory
     
-    // Note control - polyphonic
-    void noteOn(int midiNote, float velocity);
-    void noteOff(int midiNote);
-    void allNotesOff();
+    // Note control - polyphonic with instrument selection
+    void noteOn(int instrumentSlot, int midiNote, float velocity);
+    void noteOff(int instrumentSlot, int midiNote);
+    void allNotesOff(int instrumentSlot = -1);  // -1 = all instruments
     int getActiveVoiceCount() const;
     
     // Volume control
@@ -48,6 +50,7 @@ public:
 
 private:
     static const int MAX_VOICES = 8;  // 8-voice polyphony
+    static const int MAX_INSTRUMENTS = 4;  // Maximum number of instruments loaded simultaneously
     
     // Audio synthesis
     AudioSynthWavetable voices[MAX_VOICES];
@@ -62,19 +65,27 @@ private:
     AudioConnection* mixerConnection;    // mixer1 to finalMixer
     AudioConnection* mixer2Connection;   // mixer2 to finalMixer
     
-    // SoundFont reader
-    SF22ASWTreader sf22aswt;
-    AudioSynthWavetable::instrument_data* instrumentData;
+    // SoundFont readers - separate instance for each instrument slot
+    SF22ASWTreader sf22aswt_readers[MAX_INSTRUMENTS];
+    
+    // Multiple instrument support
+    struct InstrumentSlot {
+        AudioSynthWavetable::instrument_data* data;
+        bool loaded;
+        char name[64];
+        char filename[128];  // Track loaded filename for cloning
+        int instrumentIndex; // Track instrument index within file
+    };
+    InstrumentSlot instruments[MAX_INSTRUMENTS];
     
     // State
     bool initialized;
-    bool instrumentLoaded;
-    char currentInstrumentName[64];
     float volume;
     
-    // Voice allocation
+    // Voice allocation with instrument tracking
     struct VoiceState {
         bool active;
+        int instrumentSlot;
         int midiNote;
         unsigned long noteOnTime;
     };
@@ -82,7 +93,8 @@ private:
     
     // Helper methods
     int findAvailableVoice();
-    int findVoicePlayingNote(int midiNote);
+    int findVoicePlayingNote(int instrumentSlot, int midiNote);
     int findOldestVoice();
     void updateMixerGains();
+    void clearInstrumentSlot(int instrumentSlot);  // Clear instrument data safely
 };

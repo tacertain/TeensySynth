@@ -66,7 +66,171 @@ When an instrument is requested:
 3. **Parameter Conversion**: Transforms SF2 parameters to AudioSynthWavetable format
 4. **Memory Allocation**: Creates final data structures in RAM
 
-### 3. Parameter Conversion Details
+### 3. Sample-to-Note Mapping Process
+
+The SF22ASWT library implements a sophisticated sample mapping system that determines which audio samples are used for each MIDI note. This process involves parsing SoundFont 2 instrument zones and generator parameters.
+
+#### SF2 Instrument Zone Structure
+
+Each SF2 instrument consists of multiple **zones**, where each zone contains:
+- A **sample reference** (sampleID generator)
+- **Key range** (keyRange generator) - defines which MIDI notes trigger this sample
+- **Velocity range** (velRange generator) - defines which velocities use this sample
+- **Generator parameters** - pitch, envelope, loop settings, etc.
+
+```cpp
+// Example zone structure in SF2:
+Zone 1: Sample "Piano_C3.wav", Key Range: 48-59 (C3 to B3), Velocity: 1-127
+Zone 2: Sample "Piano_C4.wav", Key Range: 60-71 (C4 to B4), Velocity: 1-127  
+Zone 3: Sample "Piano_C5.wav", Key Range: 72-83 (C5 to B5), Velocity: 1-127
+```
+
+#### Parsing Process in SF22ASWT
+
+When loading an instrument, the library processes zones sequentially:
+
+```cpp
+// In Load_instrument_data():
+for (int si = 0; si < inst.sample_count; si++) {
+    // Extract key range for this sample zone
+    inst.sample_note_ranges[si] = get_key_range_end(bags, si);
+    
+    // Get the actual sample reference
+    shdr_rec shdr;
+    get_sample_header(file, sfbk, bags, si, &shdr);
+    
+    // Store sample parameters
+    inst.samples[si].SAMPLE_NOTE = get_sample_note(bags, si, shdr);
+    inst.samples[si].sample_start = shdr.dwStart * 2 + sfbk.sdta.smpl.position;
+}
+```
+
+#### Key Range Extraction
+
+The `get_key_range_end()` function extracts the upper bound of the MIDI note range:
+
+```cpp
+int ReaderBase::get_key_range_end(bag_of_gens* bags, int sampleIndex) {
+    SF2GeneratorAmount genval;
+    // Look for keyRange generator in this sample's zone
+    return get_parameter_value(bags, sampleIndex, SFGenerator::keyRange, &genval) 
+           ? genval.rangeHigh()  // Use specified range
+           : 127;               // Default to full range if not specified
+}
+```
+
+The `SF2GeneratorAmount` structure handles range encoding:
+
+```cpp
+class SF2GeneratorAmount {
+    union {
+        uint16_t UAmount;
+        struct {
+            uint8_t LowByte;   // Lower bound of range
+            uint8_t HighByte;  // Upper bound of range  
+        };
+    };
+    
+    uint8_t rangeLow() { return (LowByte < HighByte) ? LowByte : HighByte; }
+    uint8_t rangeHigh() { return (LowByte < HighByte) ? HighByte : LowByte; }
+};
+```
+
+#### Conversion to AudioSynthWavetable Format
+
+The SF22ASWT converter transforms the SF2 zone-based mapping into AudioSynthWavetable's array-based system:
+
+```cpp
+AudioSynthWavetable::instrument_data to_AudioSynthWavetable_instrument_data(
+    SF22ASWT::instrument_data_temp &data) 
+{
+    // Create arrays for samples and their note ranges
+    SF22ASWT::sample_header *samples = new SF22ASWT::sample_header[data.sample_count+1];
+    uint8_t *note_ranges = new uint8_t[data.sample_count+1];
+    
+    for (int i = 0; i < data.sample_count; i++) {
+        samples[i] = toFinal(data.samples[i]);
+        note_ranges[i] = data.sample_note_ranges[i];  // Upper bound of range
+    }
+    
+    // Add dummy sample for notes outside all ranges
+    samples[data.sample_count] = {};
+    note_ranges[data.sample_count] = 127;
+    
+    return {
+        data.sample_count + 1,
+        note_ranges,
+        reinterpret_cast<const AudioSynthWavetable::sample_data*>(samples)
+    };
+}
+```
+
+#### AudioSynthWavetable Note Selection Algorithm
+
+When a MIDI note is played, AudioSynthWavetable uses the `note_ranges` array to select the appropriate sample:
+
+```cpp
+// Conceptual AudioSynthWavetable note selection:
+void AudioSynthWavetable::playNote(int midi_note, int velocity) {
+    // Find first sample whose range includes this note
+    for (int i = 0; i < instrument.sample_count; i++) {
+        if (midi_note <= instrument.note_ranges[i]) {
+            // Use samples[i] for this note
+            selected_sample = &instrument.samples[i];
+            break;
+        }
+    }
+}
+```
+
+#### Example Mapping Scenario
+
+Consider a piano instrument with these SF2 zones:
+
+```
+SF2 Zones:
+Zone 0: Sample "Low_C.wav"    Range: 0-35   (C-1 to B1)   → note_ranges[0] = 35
+Zone 1: Sample "Mid_C.wav"    Range: 36-71  (C2 to B4)    → note_ranges[1] = 71  
+Zone 2: Sample "High_C.wav"   Range: 72-127 (C5 to G9)    → note_ranges[2] = 127
+```
+
+When converted to AudioSynthWavetable format:
+- `note_ranges = [35, 71, 127, 127]` (with dummy sample)
+- Playing MIDI note 60 (C4): Searches array, finds 60 ≤ 71, uses samples[1] ("Mid_C.wav")
+- Playing MIDI note 80 (Ab5): Searches array, finds 80 > 71 but 80 ≤ 127, uses samples[2] ("High_C.wav")
+
+#### Global vs Local Zones
+
+SF2 supports both global and local zones:
+- **Global zones** apply parameters to the entire instrument
+- **Local zones** contain actual sample references
+
+```cpp
+// Detection of global zone in Load_instrument_data():
+bool globalExists = (bags[0].count != 0) 
+                   ? (bags[0].lastItem().sfGenOper != SFGenerator::sampleID) 
+                   : true;
+
+// Adjust sample count based on global zone presence
+inst.sample_count = globalExists ? (ibag_count - 1) : ibag_count;
+```
+
+#### Velocity Layer Support
+
+While the current implementation focuses on key ranges, SF2 also supports velocity layers:
+
+```cpp
+// Velocity range extraction (similar to key range):
+SF2GeneratorAmount velRange_gen;
+if (get_parameter_value(bags, sampleIndex, SFGenerator::velRange, &velRange_gen)) {
+    uint8_t vel_low = velRange_gen.rangeLow();
+    uint8_t vel_high = velRange_gen.rangeHigh();
+}
+```
+
+This mapping system ensures that each MIDI note triggers the most appropriate sample based on the original SoundFont designer's intentions, while adapting to AudioSynthWavetable's streamlined array-based lookup mechanism.
+
+### 4. Parameter Conversion Details
 
 The converter transforms key parameters:
 
@@ -211,6 +375,136 @@ The library seamlessly integrates with the Teensy Audio Library by:
 ```cpp
 SF22ASWT::Samples_Max_Internal_RAM_Cap = 1048576;  // 1MB limit
 ```
+
+## Pitch Modification and Tuning
+
+The SF22ASWT library provides several mechanisms for modifying the pitch behavior of loaded instruments, both at the conversion stage and during playback.
+
+### 1. SoundFont-Level Pitch Parameters
+
+During the SF2 to AudioSynthWavetable conversion, several pitch-related parameters from the SoundFont are processed:
+
+#### Root Key and Fine Tuning
+```cpp
+// These SF2 parameters affect the base pitch calculation
+sample_header_temp.SAMPLE_NOTE     // Root key (MIDI note number)
+sample_header_temp.CENTS_OFFSET    // Fine tuning in cents (+/- 100 cents)
+sample_header_temp.SAMPLE_RATE     // Original sample rate
+```
+
+#### Coarse and Fine Tune Generators
+The library processes SF2 generator values that modify pitch:
+- `SFGenerator::coarseTune` - Semitone adjustments
+- `SFGenerator::fineTune` - Cent-level adjustments  
+- `SFGenerator::overridingRootKey` - Override the sample's root key
+
+### 2. Phase Increment Calculation
+
+The core pitch calculation converts SF2 parameters to a phase increment value used by AudioSynthWavetable:
+
+```cpp
+float PER_HERTZ_PHASE_INCREMENT = 
+    (1 << (32 - LENGTH_BITS)) * 
+    WAVETABLE_CENTS_SHIFT(CENTS_OFFSET) * 
+    SAMPLE_RATE / 
+    WAVETABLE_NOTE_TO_FREQUENCY(SAMPLE_NOTE) / 
+    AUDIO_SAMPLE_RATE_EXACT;
+```
+
+### 3. Modifying Pitch During Conversion
+
+To systematically alter the pitch of all samples in an instrument, you can modify the `sample_header_temp` data before conversion:
+
+```cpp
+// Example: Transpose entire instrument up by 2 semitones
+SF22ASWT::instrument_data_temp inst_temp;
+sf22aswt.Load_instrument_data(index, inst_temp);
+
+// Modify pitch for all samples
+for (int i = 0; i < inst_temp.sample_count; i++) {
+    inst_temp.samples[i].CENTS_OFFSET += 200;  // +2 semitones
+    // Or modify the root key:
+    // inst_temp.samples[i].SAMPLE_NOTE += 2;
+}
+
+// Convert to final format with modified pitch
+AudioSynthWavetable::instrument_data final_inst = 
+    SF22ASWT::converter::to_AudioSynthWavetable_instrument_data(inst_temp);
+```
+
+### 4. Runtime Pitch Control via AudioSynthWavetable
+
+Once the instrument is loaded into AudioSynthWavetable, you can control pitch during playback:
+
+```cpp
+// Play notes at different pitches
+wavetable.playNote(60);        // Middle C
+wavetable.playNote(67);        // G above middle C
+wavetable.playFrequency(440);  // Play specific frequency (A4)
+
+// Pitch bend (if supported by your AudioSynthWavetable version)
+wavetable.pitchBend(8192);     // Center position
+wavetable.pitchBend(10240);    // Bend up
+wavetable.pitchBend(6144);     // Bend down
+```
+
+### 5. Global Tuning Modifications
+
+For global tuning changes (like A=432Hz instead of A=440Hz), modify the conversion process:
+
+```cpp
+// Custom converter function with altered tuning
+AudioSynthWavetable::instrument_data custom_converter(
+    SF22ASWT::instrument_data_temp &data, 
+    float tuning_ratio = 432.0f/440.0f) 
+{
+    // Process each sample with modified tuning
+    for (int i = 0; i < data.sample_count; i++) {
+        // Adjust the phase increment for alternate tuning
+        float original_phase_inc = /* calculated value */;
+        data.samples[i]./* modify phase increment */ *= tuning_ratio;
+    }
+    return SF22ASWT::converter::to_AudioSynthWavetable_instrument_data(data);
+}
+```
+
+### 6. Key Mapping and Velocity Curves
+
+The library also supports modifying how MIDI keys map to samples:
+
+```cpp
+// Access and modify note ranges after loading
+for (int i = 0; i < inst_temp.sample_count; i++) {
+    // Modify which MIDI notes trigger this sample
+    inst_temp.sample_note_ranges[i] = new_note_range;
+}
+```
+
+### 7. Microtonal and Alternate Tuning Systems
+
+For microtonal music or alternate tuning systems:
+
+```cpp
+// Example: 31-tone equal temperament
+float cents_per_step = 1200.0f / 31.0f;  // ~38.7 cents per step
+
+// Modify each sample's tuning for 31-TET
+for (int i = 0; i < inst_temp.sample_count; i++) {
+    int tet31_note = /* convert MIDI note to 31-TET */;
+    float cent_adjustment = (tet31_note * cents_per_step) - 
+                           (inst_temp.samples[i].SAMPLE_NOTE * 100.0f);
+    inst_temp.samples[i].CENTS_OFFSET += cent_adjustment;
+}
+```
+
+### Important Notes
+
+- **Performance Impact**: Modifying pitch parameters during conversion has no runtime performance cost
+- **Memory Usage**: Creating multiple tuning variants requires additional RAM for each variant
+- **Precision**: Cent-level adjustments provide very fine pitch control (1200 cents = 1 octave)
+- **Compatibility**: Always ensure modified parameters stay within valid ranges for AudioSynthWavetable
+
+This flexibility allows the SF22ASWT library to support everything from standard equal temperament to complex microtonal and just intonation systems.
 
 ## Example Integration
 

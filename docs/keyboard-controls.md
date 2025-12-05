@@ -4,7 +4,7 @@
 The TeensySynth is a polyphonic hybrid synthesizer running on a Teensy 4.1 microcontroller. It combines three distinct synthesis methods: Karplus-Strong plucked strings, analog-style drone synthesis, and classic 80s string pads.
 
 ## Synthesis Modes
-The synthesizer has four main modes:
+The synthesizer has multiple synthesis modes:
 
 ### 1. **PLUCKED_STRINGS** Mode
 - Karplus-Strong string synthesizer for realistic plucked string sounds
@@ -23,12 +23,25 @@ The synthesizer has four main modes:
 - Supports full chord playing and complex harmonies
 - **Three chord modes**: Off (single notes), Major (6-note chords), Octave (2-note octaves)
 
-### 4. **SPLIT** Mode ✅ **NEW**
+### 4. **SOUNDFONT** Mode
+- SoundFont 2 (.sf2) file synthesizer
+- 8-voice polyphony with wavetable synthesis
+- Dynamic instrument loading from SD card
+- Supports multiple instruments loaded simultaneously
+
+### 5. **SPLIT** Mode
 - **Hybrid mode** combining drone and string pad synthesizers
 - **Split point**: Middle C (MIDI note 60)
 - **Below Middle C**: Drone synthesizer (bass/pad sounds)
 - **Above Middle C+12**: String pad synthesizer (lead/melody sounds)
 - **Perfect for solo performance** with bass accompaniment and lead melodies
+
+### 6. **TUSK** Mode ✅ **NEW**
+- **Soundfont split mode** using two loaded instruments
+- **Split point**: Middle C (MIDI note 60)
+- **Below Middle C**: Soundfont instrument 1 (typically bass/low sounds)
+- **Above Middle C**: Soundfont instrument 0 (typically lead/high sounds)
+- **Perfect for expressive performance** with different timbres across the keyboard
 
 ## Control Methods
 
@@ -39,7 +52,8 @@ Connect a MIDI controller or DAW for real-time parameter control:
 - **CC 51** (value 127): Switch to Plucked Strings
 - **CC 52** (value 127): Switch to Drone mode
 - **CC 53** (value 127): String Pads + **"Bright Strings"** preset  
-- **CC 54** (value 127): Switch to Soundfont mode and load "trumpet.sf2" 
+- **CC 54** (value 127): Switch to Soundfont mode and load "trumpet.sf2"
+- **CC 55** (value 127): Switch to **TUSK mode** - Soundfont split mode with instrument 0 above split point, instrument 1 below 
 
 #### Volume Controls (Channel 1)
 - **CC 7**: Master Volume (0-127) - Controls overall output level
