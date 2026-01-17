@@ -277,10 +277,15 @@ void MIDIController::handleControlChange(byte channel, byte control, byte value)
         synth.setDefaultInstrument(0);
     }
 
-    if (channel == 1 && control == 58 && value == 127) // CC 58 - Split Mode
+    if (channel == 1 && control == 58 && value == 127) // CC 58 - TUSK_CHORD Mode
     {
-        synth.setSynthMode(HybridSynthesizer::SPLIT);
-        Serial.println("Mode: SPLIT - Drone below C5, String Pads above (CC 58)");
+        Serial.println("CC 58 triggered - Switching to TUSK_CHORD mode");
+        synth.setSynthMode(HybridSynthesizer::TUSK_CHORD);
+        synth.setSplitPoint(60);
+        Serial.println("Mode: TUSK_CHORD - Soundfont split mode with chord support (CC 58)");
+
+        synth.loadTuskInstruments();
+        synth.loadTuskTrumpetMap();
     }
     
     if (channel == 1 && control == 59 && value == 127) // CC 59 - Cycle String Pad Chord Mode

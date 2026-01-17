@@ -38,7 +38,13 @@ void setup()
     } else {
         Serial.println("Warning: Soundfont synthesizer initialization failed");
     }
+    
+    // Set up TUSK_CHORD mode as default
+    synth.setSynthMode(HybridSynthesizer::TUSK_CHORD);
+    synth.setSplitPoint(60);
     synth.loadTuskInstruments();
+    synth.loadTuskTrumpetMap();
+    Serial.println("Started in TUSK_CHORD mode");
 
 #ifdef TFT_DISPLAY
     // Initialize TFT Display

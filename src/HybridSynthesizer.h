@@ -23,7 +23,8 @@ public:
         SOUNDFONT,          // SoundFont (.sf2) synthesizer
         SPLIT,              // Split mode: drone below split point, string pads above
         IRAN,               // Special mode for I Ran
-        TUSK                // Soundfont split mode: instrument 0 above split, instrument 1 below
+        TUSK,               // Soundfont split mode: instrument 0 above split, instrument 1 below
+        TUSK_CHORD          // Soundfont split mode with chord support (same as TUSK for now)
     };
 
 private:
@@ -76,9 +77,26 @@ private:
     float stringPadVolume = 1.0f;
     float soundfontVolume = 1.0f;
     
-    SynthMode currentMode = TUSK; 
+    SynthMode currentMode = TUSK_CHORD; 
     uint8_t splitPoint = 60; // C4
-    int defaultInstrument = 0; // Default instrument slot for SOUNDFONT mode 
+    int defaultInstrument = 0; // Default instrument slot for SOUNDFONT mode
+    
+    // TUSK_CHORD mode: static chord mapping structure for 12 semitones
+    static const int MAX_CHORD_NOTES = 8;
+    static const int NUM_SEMITONES = 12;
+    
+    struct ChordNotes {
+        int8_t offsets[MAX_CHORD_NOTES];  // Semitone offsets from root note
+        uint8_t count;                      // Number of notes in the chord
+    };
+    
+    ChordNotes chordPatterns[NUM_SEMITONES]; // One pattern per semitone (0-11)
+    
+    struct ActiveChord {
+        int8_t notes[MAX_CHORD_NOTES];  // Actual MIDI notes being played
+        uint8_t count;                   // Number of notes
+    };
+    ActiveChord activeChords[128]; // Track active chords for each MIDI key 
 
 public:
     HybridSynthesizer() :
@@ -98,6 +116,16 @@ public:
         patchCordUsbL(nullptr),
         patchCordUsbR(nullptr)
     {
+        // Initialize chord patterns to empty
+        for (int i = 0; i < NUM_SEMITONES; i++) {
+            chordPatterns[i].count = 0;
+        }
+        
+        // Initialize active chords to empty
+        for (int i = 0; i < 128; i++) {
+            activeChords[i].count = 0;
+        }
+        
         // Connect strings to sum mixers
         stringPatchCordL = new AudioConnection(*strings.getLeftOutput(), 0, sumL, 0);
         stringPatchCordR = new AudioConnection(*strings.getRightOutput(), 0, sumR, 0);
@@ -168,7 +196,7 @@ public:
     // Synthesis mode control
     void setSynthMode(SynthMode mode) { 
         // Print current peak levels before switching modes
-        const char* modeNames[] = {"PLUCKED_STRINGS", "DRONE", "STRING_PADS", "SOUNDFONT", "SPLIT", "IRAN", "TUSK"};
+        const char* modeNames[] = {"PLUCKED_STRINGS", "DRONE", "STRING_PADS", "SOUNDFONT", "SPLIT", "IRAN", "TUSK", "TUSK_CHORD"};
         const char* currentModeName = (currentMode >= 0 && currentMode < 7) ? modeNames[currentMode] : "UNKNOWN";
         const char* newModeName = (mode >= 0 && mode < 7) ? modeNames[mode] : "UNKNOWN";
         
@@ -238,6 +266,84 @@ public:
             Serial.println("Instrument 0 from trumpet_tusk.sf2 loaded successfully into slot 0");
         } else {
             Serial.println("Failed to load instrument 0 from trumpet_tusk.sf2 into slot 0");
+        }
+    }
+    
+    void loadTuskTrumpetMap() {
+        // Clear existing chord patterns
+        for (int i = 0; i < NUM_SEMITONES; i++) {
+            chordPatterns[i].count = 0;
+        }
+        
+        // Load Tusk Trumpet chord mappings (semitones: C=0, C#=1, D=2, D#=3, E=4, F=5, F#=6, G=7, G#=8, A=9, A#=10, B=11)
+        // A -> A, D, F, A-2oct, D-2oct (offsets: 0, +5, +8, -24, -19)
+        chordPatterns[9].offsets[0] = 0;
+        chordPatterns[9].offsets[1] = 5;
+        chordPatterns[9].offsets[2] = 8;
+        chordPatterns[9].offsets[3] = -24;
+        chordPatterns[9].offsets[4] = -19;
+        chordPatterns[9].count = 5;
+        
+        // G -> G, C, E, G-2oct, C-2oct (offsets: 0, +5, +9, -24, -19)
+        chordPatterns[7].offsets[0] = 0;
+        chordPatterns[7].offsets[1] = 5;
+        chordPatterns[7].offsets[2] = 9;
+        chordPatterns[7].offsets[3] = -24;
+        chordPatterns[7].offsets[4] = -19;
+        chordPatterns[7].count = 5;
+        
+        // F -> F, A, D, F-2oct, A-2oct (offsets: 0, +4, +9, -24, -20)
+        chordPatterns[5].offsets[0] = 0;
+        chordPatterns[5].offsets[1] = 4;
+        chordPatterns[5].offsets[2] = 9;
+        chordPatterns[5].offsets[3] = -24;
+        chordPatterns[5].offsets[4] = -20;
+        chordPatterns[5].count = 5;
+        
+        // B -> G, B, D, G-2oct, B-2oct (offsets: -4, 0, +3, -28, -24)
+        chordPatterns[11].offsets[0] = -4;
+        chordPatterns[11].offsets[1] = 0;
+        chordPatterns[11].offsets[2] = 3;
+        chordPatterns[11].offsets[3] = -28;
+        chordPatterns[11].offsets[4] = -24;
+        chordPatterns[11].count = 5;
+        
+        // C# -> A, C#, E, A-2oct, C#-2oct (offsets: -4, 0, +3, -28, -24)
+        chordPatterns[1].offsets[0] = -4;
+        chordPatterns[1].offsets[1] = 0;
+        chordPatterns[1].offsets[2] = 3;
+        chordPatterns[1].offsets[3] = -28;
+        chordPatterns[1].offsets[4] = -24;
+        chordPatterns[1].count = 5;
+        
+        Serial.println("Tusk Trumpet chord map loaded");
+    }
+    
+    // TUSK_CHORD helper methods
+    void setChordPattern(int semitone, const int8_t* offsets, int noteCount) {
+        // Set chord pattern for a specific semitone (0-11)
+        if (semitone < 0 || semitone >= NUM_SEMITONES) return;
+        
+        chordPatterns[semitone].count = min(noteCount, MAX_CHORD_NOTES);
+        for (int i = 0; i < chordPatterns[semitone].count; i++) {
+            chordPatterns[semitone].offsets[i] = offsets[i];
+        }
+    }
+    
+    void getChordForNote(int note, ActiveChord& outChord) {
+        // Get semitone (0-11) from MIDI note
+        int semitone = note % NUM_SEMITONES;
+        
+        // Check if there's a chord pattern for this semitone
+        if (chordPatterns[semitone].count > 0) {
+            outChord.count = chordPatterns[semitone].count;
+            for (int i = 0; i < outChord.count; i++) {
+                outChord.notes[i] = note + chordPatterns[semitone].offsets[i];
+            }
+        } else {
+            // No pattern, return single note
+            outChord.count = 1;
+            outChord.notes[0] = note;
         }
     }
     
@@ -342,7 +448,34 @@ public:
                 }
                 else
                 {
-                    soundfont.noteOn(0, key, velocity); // Instrument 1 below split point
+                    soundfont.noteOn(0, key, velocity); // Instrument 0 above split point
+                }
+                break;
+            case TUSK_CHORD:
+                if (key < splitPoint)
+                {
+                    // Below split point: play single note (no chord) at max velocity
+                    soundfont.noteOn(1, key + 12, 1.0f); // Instrument 1 below split point, max velocity
+                    activeChords[key].count = 0; // Mark as no chord
+                }
+                else
+                {
+                    // Above split point: play chord at max velocity
+                    ActiveChord chord;
+                    getChordForNote(key, chord);
+                    activeChords[key] = chord; // Store for noteOff
+                    
+                    for (int i = 0; i < chord.count; i++) {
+                        int chordNote = chord.notes[i];
+                        if (chordNote < splitPoint)
+                        {
+                            soundfont.noteOn(1, chordNote + 12, 1.0f); // Instrument 1 below split point, max velocity
+                        }
+                        else
+                        {
+                            soundfont.noteOn(0, chordNote, 1.0f); // Instrument 0 above split point, max velocity
+                        }
+                    }
                 }
                 break;
             }
@@ -411,6 +544,32 @@ public:
                     soundfont.noteOff(0, key);  // Instrument 0 above split point
                 }
                 break;
+            case TUSK_CHORD:
+                if (key < splitPoint)
+                {
+                    // Below split point: turn off single note
+                    soundfont.noteOff(1, key + 12);  // Instrument 1 below split point
+                }
+                else
+                {
+                    // Above split point: turn off all notes in the chord
+                    if (activeChords[key].count > 0) {
+                        ActiveChord& chord = activeChords[key];
+                        for (int i = 0; i < chord.count; i++) {
+                            int chordNote = chord.notes[i];
+                            if (chordNote < splitPoint)
+                            {
+                                soundfont.noteOff(1, chordNote + 12);  // Instrument 1 below split point
+                            }
+                            else
+                            {
+                                soundfont.noteOff(0, chordNote);  // Instrument 0 above split point
+                            }
+                        }
+                        activeChords[key].count = 0; // Clear the active chord
+                    }
+                }
+                break;
             }
     }
 
@@ -453,7 +612,11 @@ public:
         Serial.print(" | R: min=");
         Serial.print(peakMonitorR.getMin());
         Serial.print(", max=");
-        Serial.println(peakMonitorR.getMax());
+        Serial.print(peakMonitorR.getMax());
+        Serial.print(" | Audio Memory: ");
+        Serial.print(AudioMemoryUsage());
+        Serial.print("/");
+        Serial.println(AudioMemoryUsageMax());
     }
 
 private:
