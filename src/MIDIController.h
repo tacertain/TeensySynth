@@ -7,6 +7,18 @@
 // Project headers
 #include "HybridSynthesizer.h"
 
+// Forward declaration
+class MIDIController;
+
+// Callback function type for control change handlers
+typedef void (*MIDIControlChangeCallback)(MIDIController* controller, byte channel, byte control, byte value);
+
+// Structure to map a control number to its callback
+struct MIDIControllerChannelCallback {
+    byte control;  // Control change number
+    MIDIControlChangeCallback callback;  // Handler function
+};
+
 /**
  * MIDIController
  * 
@@ -28,10 +40,23 @@ public:
     void handleControlChange(byte channel, byte control, byte value);
     void handlePitchChange(byte channel, int bend);
     
+    // Install a new set of control change callbacks for a specific bank
+    // Bank numbers correspond to CC ranges: Bank 0 = CC 0-9, Bank 1 = CC 10-19, etc.
+    void installCallbacks(byte bank, const MIDIControllerChannelCallback* callbacks, size_t count);
+    
+    // Accessor for synthesizer (needed by callback functions)
+    HybridSynthesizer& getSynth() { return synth; }
+    
 private:
     HybridSynthesizer& synth;
     USBHost& usbHost;
     MIDIDevice& midiDevice;
+    
+    // Control change callback tables organized by banks (CC ranges)
+    // Bank 0 = CC 0-9, Bank 1 = CC 10-19, Bank 2 = CC 20-29, etc.
+    static const size_t MAX_BANKS = 13;  // Covers CC 0-127
+    const MIDIControllerChannelCallback* callbackTables[MAX_BANKS];
+    size_t callbackCounts[MAX_BANKS];
     
     // Helper functions for MIDI processing
     float midiNoteToFrequency(byte note);
