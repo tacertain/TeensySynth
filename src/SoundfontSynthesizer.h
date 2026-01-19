@@ -3,18 +3,18 @@
 #include <Audio.h>
 #include <AudioStream.h>
 #include <SD.h>
-#include <sf22aswt.h>
+#include "SoundfontInstrument.h"
 
 /**
  * SoundfontSynthesizer
  * 
- * Polyphonic synthesizer using SoundFont 2 (.sf2) files.
- * Utilizes the sf22aswt library to load and play SF2 instruments
- * with the Teensy AudioSynthWavetable.
+ * Manages multiple SoundfontInstrument instances (up to MAX_INSTRUMENTS).
+ * Each instrument has 4 voices and its own mixer.
+ * All instruments are combined in the final mixer.
  * 
  * Features:
  * - Multiple instrument support (up to MAX_INSTRUMENTS)
- * - Polyphonic playback with multiple voices
+ * - Each instrument has 4-voice polyphony
  * - Dynamic instrument loading from SD card
  * - Stereo output
  * - Volume control
@@ -44,57 +44,23 @@ public:
     // Audio outputs (mono output, duplicated to L/R by HybridSynthesizer)
     AudioStream* getLeftOutput();
     AudioStream* getRightOutput();
-    
-    // Direct voice access (for advanced use)
-    AudioSynthWavetable& getVoice(int index);
 
 private:
-    static const int MAX_VOICES = 8;  // 8-voice polyphony
-    static const int MAX_INSTRUMENTS = 4;  // Maximum number of instruments loaded simultaneously
+    static const int MAX_INSTRUMENTS = 4;  // Maximum number of instruments
     
-    // Audio synthesis
-    AudioSynthWavetable voices[MAX_VOICES];
+    // Instrument instances
+    SoundfontInstrument instruments[MAX_INSTRUMENTS];
     
-    // Audio mixing
-    AudioMixer4 mixer1;  // Mix voices 0-3
-    AudioMixer4 mixer2;  // Mix voices 4-7
-    AudioMixer4 finalMixer; // Combine mixer1 and mixer2
+    // Final mixer - combines all instruments
+    AudioMixer4 finalMixer;
     
-    // Audio connections
-    AudioConnection* voiceConnections[MAX_VOICES];
-    AudioConnection* mixerConnection;    // mixer1 to finalMixer
-    AudioConnection* mixer2Connection;   // mixer2 to finalMixer
-    
-    // SoundFont readers - separate instance for each instrument slot
-    SF22ASWTreader sf22aswt_readers[MAX_INSTRUMENTS];
-    
-    // Multiple instrument support
-    struct InstrumentSlot {
-        AudioSynthWavetable::instrument_data* data;
-        bool loaded;
-        char name[64];
-        char filename[128];  // Track loaded filename for cloning
-        int instrumentIndex; // Track instrument index within file
-    };
-    InstrumentSlot instruments[MAX_INSTRUMENTS];
+    // Audio connections - instrument outputs to final mixer
+    AudioConnection* instrumentConnections[MAX_INSTRUMENTS];
     
     // State
     bool initialized;
     float volume;
     
-    // Voice allocation with instrument tracking
-    struct VoiceState {
-        bool active;
-        int instrumentSlot;
-        int midiNote;
-        unsigned long noteOnTime;
-    };
-    VoiceState voiceStates[MAX_VOICES];
-    
     // Helper methods
-    int findAvailableVoice();
-    int findVoicePlayingNote(int instrumentSlot, int midiNote);
-    int findOldestVoice();
     void updateMixerGains();
-    void clearInstrumentSlot(int instrumentSlot);  // Clear instrument data safely
 };
