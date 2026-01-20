@@ -3,9 +3,15 @@
 
 SoundfontInstrument::SoundfontInstrument()
     : instrumentData(nullptr)
+    , centsOffsets(nullptr)
+    , sampleCount(0)
     , loaded(false)
     , instrumentIndex(-1)
     , volume(1.0f)
+    , attackMs(5.0f)
+    , decayMs(200.0f)
+    , sustainLevel(0.4f)
+    , releaseMs(300.0f)
 {
     name[0] = '\0';
     filename[0] = '\0';
@@ -16,11 +22,19 @@ SoundfontInstrument::SoundfontInstrument()
         voiceStates[i].midiNote = -1;
         voiceStates[i].noteOnTime = 0;
         voiceConnections[i] = nullptr;
+        envelopeConnections[i] = nullptr;
     }
     
-    // Connect voices to mixer
+    // Connect voices → envelopes → mixer
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
-        voiceConnections[i] = new AudioConnection(voices[i], 0, mixer, i);
+        voiceConnections[i] = new AudioConnection(voices[i], 0, envelopes[i], 0);
+        envelopeConnections[i] = new AudioConnection(envelopes[i], 0, mixer, i);
+        
+        // Set default ADSR parameters
+        envelopes[i].attack(attackMs);
+        envelopes[i].decay(decayMs);
+        envelopes[i].sustain(sustainLevel);
+        envelopes[i].release(releaseMs);
     }
     
     // Set initial mixer gains
@@ -31,12 +45,19 @@ SoundfontInstrument::~SoundfontInstrument() {
     // Clean up audio connections
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
         delete voiceConnections[i];
+        delete envelopeConnections[i];
     }
     
     // Clean up instrument data
     if (instrumentData != nullptr) {
         delete instrumentData;
         instrumentData = nullptr;
+    }
+    
+    // Clean up cents offsets array
+    if (centsOffsets != nullptr) {
+        delete[] centsOffsets;
+        centsOffsets = nullptr;
     }
 }
 
@@ -65,11 +86,29 @@ bool SoundfontInstrument::loadInstrument(const char* filename, int instrumentInd
     
     // Store old instrument data to delete after switching
     AudioSynthWavetable::instrument_data* oldInstrument = instrumentData;
+    int* oldCentsOffsets = centsOffsets;
     
-    // Read and load instrument
+    // Load instrument data (temp format with CENTS_OFFSET)
+    SF22ASWT::instrument_data_temp inst_temp;
     bool success = false;
+    
     if (sf2Reader.ReadFile(fullPath)) {
-        success = sf2Reader.Load_instrument(instrumentIndex, instrumentData);
+        if (sf2Reader.Load_instrument_data(instrumentIndex, inst_temp)) {
+            // Store cents offsets before conversion
+            sampleCount = inst_temp.sample_count;
+            centsOffsets = new int[sampleCount];
+            for (int i = 0; i < sampleCount; ++i) {
+                centsOffsets[i] = inst_temp.samples[i].CENTS_OFFSET;
+            }
+            
+            // Load sample data and convert to AudioSynthWavetable format
+            if (sf2Reader.ReadSampleDataFromFile(inst_temp)) {
+                instrumentData = new AudioSynthWavetable::instrument_data(
+                    SF22ASWT::converter::to_AudioSynthWavetable_instrument_data(inst_temp)
+                );
+                success = true;
+            }
+        }
     } else {
         Serial.println("SoundfontInstrument: Failed to read SF2 file");
     }
@@ -77,12 +116,16 @@ bool SoundfontInstrument::loadInstrument(const char* filename, int instrumentInd
     if (!success) {
         Serial.println("SoundfontInstrument: Failed to load instrument");
         instrumentData = oldInstrument;  // Restore old data
+        centsOffsets = oldCentsOffsets;
         return false;
     }
     
     // Clean up old instrument data
     if (oldInstrument != nullptr) {
         delete oldInstrument;
+    }
+    if (oldCentsOffsets != nullptr) {
+        delete[] oldCentsOffsets;
     }
     
     // Store instrument metadata
@@ -116,6 +159,13 @@ void SoundfontInstrument::unload() {
         instrumentData = nullptr;
     }
     
+    // Clean up cents offsets
+    if (centsOffsets != nullptr) {
+        delete[] centsOffsets;
+        centsOffsets = nullptr;
+    }
+    sampleCount = 0;
+    
     // Clear metadata
     loaded = false;
     name[0] = '\0';
@@ -142,8 +192,22 @@ void SoundfontInstrument::noteOn(int midiNote, float velocity) {
     // Convert velocity to 0-127 range for AudioSynthWavetable
     int vel = constrain(velocity * 127.0f, 0, 127);
     
+    // Find which sample will be used for this note (same logic as AudioSynthWavetable::setState)
+    int sampleIndex = 0;
+    for (int i = 0; midiNote > instrumentData->sample_note_ranges[i]; i++) {
+        sampleIndex = i + 1;
+    }
+    
+    // Print tuning information with original cents offset
+    Serial.printf("NoteOn: note=%d, sample=%d, centsOffset=%d\n", 
+                  midiNote, sampleIndex, 
+                  (sampleIndex < sampleCount) ? centsOffsets[sampleIndex] : 0);
+    
     // Start the note
     voices[voiceIndex].playNote(midiNote, vel);
+    
+    // Trigger envelope
+    envelopes[voiceIndex].noteOn();
     
     // Update voice state
     voiceStates[voiceIndex].active = true;
@@ -155,7 +219,10 @@ void SoundfontInstrument::noteOff(int midiNote) {
     // Find the voice playing this note
     int voiceIndex = findVoicePlayingNote(midiNote);
     if (voiceIndex != -1) {
-        voices[voiceIndex].stop();
+        // Trigger envelope release (let it decay naturally)
+        envelopes[voiceIndex].noteOff();
+        
+        // Mark voice as inactive (will be reused after release completes)
         voiceStates[voiceIndex].active = false;
         voiceStates[voiceIndex].midiNote = -1;
     }
@@ -164,6 +231,7 @@ void SoundfontInstrument::noteOff(int midiNote) {
 void SoundfontInstrument::allNotesOff() {
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
         voices[i].stop();
+        envelopes[i].noteOff();  // Trigger release for all envelopes
         voiceStates[i].active = false;
         voiceStates[i].midiNote = -1;
     }
@@ -190,6 +258,41 @@ float SoundfontInstrument::getVolume() const {
 
 AudioStream* SoundfontInstrument::getOutput() {
     return &mixer;
+}
+
+void SoundfontInstrument::setAttack(float milliseconds) {
+    attackMs = constrain(milliseconds, 0.0f, 11880.0f);
+    for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
+        envelopes[i].attack(attackMs);
+    }
+}
+
+void SoundfontInstrument::setDecay(float milliseconds) {
+    decayMs = constrain(milliseconds, 0.0f, 11880.0f);
+    for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
+        envelopes[i].decay(decayMs);
+    }
+}
+
+void SoundfontInstrument::setSustain(float level) {
+    sustainLevel = constrain(level, 0.0f, 1.0f);
+    for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
+        envelopes[i].sustain(sustainLevel);
+    }
+}
+
+void SoundfontInstrument::setRelease(float milliseconds) {
+    releaseMs = constrain(milliseconds, 0.0f, 11880.0f);
+    for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
+        envelopes[i].release(releaseMs);
+    }
+}
+
+void SoundfontInstrument::setADSR(float attack, float decay, float sustain, float release) {
+    setAttack(attack);
+    setDecay(decay);
+    setSustain(sustain);
+    setRelease(release);
 }
 
 int SoundfontInstrument::findAvailableVoice() {

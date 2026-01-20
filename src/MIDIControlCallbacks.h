@@ -20,6 +20,12 @@ void CC_LFORate(MIDIController* controller, byte channel, byte control, byte val
 void CC_OscillatorDetune(MIDIController* controller, byte channel, byte control, byte value);
 void CC_LFODepth(MIDIController* controller, byte channel, byte control, byte value);
 
+// Soundfont ADSR controls
+void CC_SoundfontAttack(MIDIController* controller, byte channel, byte control, byte value);
+void CC_SoundfontDecay(MIDIController* controller, byte channel, byte control, byte value);
+void CC_SoundfontSustain(MIDIController* controller, byte channel, byte control, byte value);
+void CC_SoundfontRelease(MIDIController* controller, byte channel, byte control, byte value);
+
 // String pad controls
 void CC_StringPadVolume(MIDIController* controller, byte channel, byte control, byte value);
 void CC_StringPadFilterCutoff(MIDIController* controller, byte channel, byte control, byte value);
@@ -55,6 +61,10 @@ extern const size_t channel1Bank_11_20_count;
 extern const MIDIControllerChannelCallback channel1Bank_21_30[];
 extern const size_t channel1Bank_21_30_count;
 
+// Bank 2 (alternate): CC 20-29 - Soundfont ADSR controls
+extern const MIDIControllerChannelCallback channel1Bank_21_30_SF[];
+extern const size_t channel1Bank_21_30_SF_count;
+
 // Bank 3: CC 30-39 - (currently unused)
 extern const MIDIControllerChannelCallback channel1Bank_31_40[];
 extern const size_t channel1Bank_31_40_count;
@@ -66,3 +76,10 @@ extern const size_t channel1Bank_41_50_count;
 // Bank 5: CC 50-59 - Mode switching controls
 extern const MIDIControllerChannelCallback channel1Bank_51_60[];
 extern const size_t channel1Bank_51_60_count;
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+// Install bank 2 callbacks appropriate for soundfont or non-soundfont modes
+void installBank2ForMode(MIDIController* controller, bool isSoundfontMode);

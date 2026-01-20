@@ -160,6 +160,30 @@ AudioStream* SoundfontSynthesizer::getRightOutput() {
     return &finalMixer;
 }
 
+void SoundfontSynthesizer::setAttack(float milliseconds) {
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        instruments[i].setAttack(milliseconds);
+    }
+}
+
+void SoundfontSynthesizer::setDecay(float milliseconds) {
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        instruments[i].setDecay(milliseconds);
+    }
+}
+
+void SoundfontSynthesizer::setSustain(float level) {
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        instruments[i].setSustain(level);
+    }
+}
+
+void SoundfontSynthesizer::setRelease(float milliseconds) {
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        instruments[i].setRelease(milliseconds);
+    }
+}
+
 void SoundfontSynthesizer::updateMixerGains() {
     // Count how many instruments are loaded
     int loadedCount = 0;

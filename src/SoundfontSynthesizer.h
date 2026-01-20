@@ -41,6 +41,12 @@ public:
     void setVolume(float volume);  // 0.0 - 1.0
     float getVolume() const;
     
+    // ADSR envelope control (applies to all loaded instruments)
+    void setAttack(float milliseconds);
+    void setDecay(float milliseconds);
+    void setSustain(float level);  // 0.0-1.0
+    void setRelease(float milliseconds);
+    
     // Audio outputs (mono output, duplicated to L/R by HybridSynthesizer)
     AudioStream* getLeftOutput();
     AudioStream* getRightOutput();

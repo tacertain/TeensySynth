@@ -37,6 +37,13 @@ public:
     void setVolume(float volume);  // 0.0 - 1.0
     float getVolume() const;
     
+    // ADSR envelope control
+    void setAttack(float milliseconds);   // Attack time in ms
+    void setDecay(float milliseconds);    // Decay time in ms
+    void setSustain(float level);         // Sustain level 0.0-1.0
+    void setRelease(float milliseconds);  // Release time in ms
+    void setADSR(float attack, float decay, float sustain, float release);
+    
     // Audio output
     AudioStream* getOutput();
 
@@ -46,17 +53,23 @@ private:
     // Audio synthesis
     AudioSynthWavetable voices[VOICES_PER_INSTRUMENT];
     
+    // ADSR envelopes - one per voice
+    AudioEffectEnvelope envelopes[VOICES_PER_INSTRUMENT];
+    
     // Audio mixing - combines 4 voices
     AudioMixer4 mixer;
     
-    // Audio connections
+    // Audio connections: voice → envelope → mixer
     AudioConnection* voiceConnections[VOICES_PER_INSTRUMENT];
+    AudioConnection* envelopeConnections[VOICES_PER_INSTRUMENT];
     
     // SoundFont reader
     SF22ASWTreader sf2Reader;
     
     // Instrument data
     AudioSynthWavetable::instrument_data* instrumentData;
+    int* centsOffsets;  // Store original CENTS_OFFSET for each sample (for debugging)
+    int sampleCount;
     bool loaded;
     char name[64];
     char filename[128];
@@ -72,6 +85,12 @@ private:
     
     // Volume
     float volume;
+    
+    // ADSR parameters (in milliseconds and 0.0-1.0 for sustain)
+    float attackMs;
+    float decayMs;
+    float sustainLevel;
+    float releaseMs;
     
     // Helper methods
     int findAvailableVoice();
