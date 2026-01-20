@@ -12,6 +12,8 @@ SoundfontInstrument::SoundfontInstrument()
     , decayMs(200.0f)
     , sustainLevel(0.4f)
     , releaseMs(300.0f)
+    , filterFrequency(8000.0f)
+    , filterResonance(0.7f)
 {
     name[0] = '\0';
     filename[0] = '\0';
@@ -23,18 +25,24 @@ SoundfontInstrument::SoundfontInstrument()
         voiceStates[i].noteOnTime = 0;
         voiceConnections[i] = nullptr;
         envelopeConnections[i] = nullptr;
+        filterConnections[i] = nullptr;
     }
     
-    // Connect voices → envelopes → mixer
+    // Connect voices → envelopes → filters → mixer
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
         voiceConnections[i] = new AudioConnection(voices[i], 0, envelopes[i], 0);
-        envelopeConnections[i] = new AudioConnection(envelopes[i], 0, mixer, i);
+        envelopeConnections[i] = new AudioConnection(envelopes[i], 0, filters[i], 0);
+        filterConnections[i] = new AudioConnection(filters[i], 0, mixer, i);
         
         // Set default ADSR parameters
         envelopes[i].attack(attackMs);
         envelopes[i].decay(decayMs);
         envelopes[i].sustain(sustainLevel);
         envelopes[i].release(releaseMs);
+        
+        // Set default filter parameters
+        filters[i].frequency(filterFrequency);
+        filters[i].resonance(filterResonance);
     }
     
     // Set initial mixer gains
@@ -46,6 +54,7 @@ SoundfontInstrument::~SoundfontInstrument() {
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
         delete voiceConnections[i];
         delete envelopeConnections[i];
+        delete filterConnections[i];
     }
     
     // Clean up instrument data
@@ -293,6 +302,20 @@ void SoundfontInstrument::setADSR(float attack, float decay, float sustain, floa
     setDecay(decay);
     setSustain(sustain);
     setRelease(release);
+}
+
+void SoundfontInstrument::setFilterFrequency(float frequency) {
+    filterFrequency = constrain(frequency, 20.0f, 20000.0f);
+    for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
+        filters[i].frequency(filterFrequency);
+    }
+}
+
+void SoundfontInstrument::setFilterResonance(float q) {
+    filterResonance = constrain(q, 0.7f, 5.0f);
+    for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
+        filters[i].resonance(filterResonance);
+    }
 }
 
 int SoundfontInstrument::findAvailableVoice() {

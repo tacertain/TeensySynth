@@ -82,6 +82,13 @@ void CC_SoundfontRelease(MIDIController* controller, byte channel, byte control,
     Serial.printf("Soundfont Release: %.1f ms (CC %d = %d)\n", releaseMs, control, value);
 }
 
+void CC_SoundfontFilterFrequency(MIDIController* controller, byte channel, byte control, byte value) {
+    // Map 0-127 to 100Hz - 12000Hz (exponential)
+    float frequency = 100.0f * pow(120.0f, (float)value / 127.0f);
+    controller->getSynth().getSoundfont().setFilterFrequency(frequency);
+    Serial.printf("Soundfont Filter Frequency: %.1f Hz (CC %d = %d)\n", frequency, control, value);
+}
+
 void CC_StringPadVolume(MIDIController* controller, byte channel, byte control, byte value) {
     controller->getSynth().setStringPadVolume((float)value / 127.0f);
     Serial.printf("String pad volume: %.2f\n", (float)value / 127.0f);
@@ -325,6 +332,7 @@ const MIDIControllerChannelCallback channel1Bank_21_30_SF[] = {
     { 22, CC_SoundfontDecay },
     { 23, CC_SoundfontSustain },
     { 24, CC_SoundfontRelease },
+    { 25, CC_SoundfontFilterFrequency },
 };
 const size_t channel1Bank_21_30_SF_count = sizeof(channel1Bank_21_30_SF) / sizeof(channel1Bank_21_30_SF[0]);
 

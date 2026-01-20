@@ -184,6 +184,18 @@ void SoundfontSynthesizer::setRelease(float milliseconds) {
     }
 }
 
+void SoundfontSynthesizer::setFilterFrequency(float frequency) {
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        instruments[i].setFilterFrequency(frequency);
+    }
+}
+
+void SoundfontSynthesizer::setFilterResonance(float q) {
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        instruments[i].setFilterResonance(q);
+    }
+}
+
 void SoundfontSynthesizer::updateMixerGains() {
     // Count how many instruments are loaded
     int loadedCount = 0;

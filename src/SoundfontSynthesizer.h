@@ -47,6 +47,10 @@ public:
     void setSustain(float level);  // 0.0-1.0
     void setRelease(float milliseconds);
     
+    // Filter control (applies to all loaded instruments)
+    void setFilterFrequency(float frequency);  // Hz
+    void setFilterResonance(float q);          // Q factor
+    
     // Audio outputs (mono output, duplicated to L/R by HybridSynthesizer)
     AudioStream* getLeftOutput();
     AudioStream* getRightOutput();

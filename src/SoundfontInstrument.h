@@ -44,6 +44,10 @@ public:
     void setRelease(float milliseconds);  // Release time in ms
     void setADSR(float attack, float decay, float sustain, float release);
     
+    // Filter control
+    void setFilterFrequency(float frequency);  // Cutoff frequency in Hz
+    void setFilterResonance(float q);          // Q factor (0.7 - 5.0)
+    
     // Audio output
     AudioStream* getOutput();
 
@@ -56,12 +60,16 @@ private:
     // ADSR envelopes - one per voice
     AudioEffectEnvelope envelopes[VOICES_PER_INSTRUMENT];
     
+    // Low-pass filters - one per voice
+    AudioFilterStateVariable filters[VOICES_PER_INSTRUMENT];
+    
     // Audio mixing - combines 4 voices
     AudioMixer4 mixer;
     
-    // Audio connections: voice → envelope → mixer
+    // Audio connections: voice → envelope → filter → mixer
     AudioConnection* voiceConnections[VOICES_PER_INSTRUMENT];
     AudioConnection* envelopeConnections[VOICES_PER_INSTRUMENT];
+    AudioConnection* filterConnections[VOICES_PER_INSTRUMENT];
     
     // SoundFont reader
     SF22ASWTreader sf2Reader;
@@ -91,6 +99,10 @@ private:
     float decayMs;
     float sustainLevel;
     float releaseMs;
+    
+    // Filter parameters
+    float filterFrequency;  // Hz
+    float filterResonance;  // Q factor
     
     // Helper methods
     int findAvailableVoice();

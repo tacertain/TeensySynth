@@ -26,6 +26,9 @@ void CC_SoundfontDecay(MIDIController* controller, byte channel, byte control, b
 void CC_SoundfontSustain(MIDIController* controller, byte channel, byte control, byte value);
 void CC_SoundfontRelease(MIDIController* controller, byte channel, byte control, byte value);
 
+// Soundfont filter controls
+void CC_SoundfontFilterFrequency(MIDIController* controller, byte channel, byte control, byte value);
+
 // String pad controls
 void CC_StringPadVolume(MIDIController* controller, byte channel, byte control, byte value);
 void CC_StringPadFilterCutoff(MIDIController* controller, byte channel, byte control, byte value);
