@@ -4,6 +4,7 @@
 #include <AudioStream.h>
 #include <SD.h>
 #include <sf22aswt.h>
+#include "DelayedFader.h"
 
 /**
  * SoundfontInstrument
@@ -45,8 +46,11 @@ public:
     void setADSR(float attack, float decay, float sustain, float release);
     
     // Filter control
-    void setFilterFrequency(float frequency);  // Cutoff frequency in Hz
-    void setFilterResonance(float q);          // Q factor (0.7 - 5.0)
+    void setFilterMultiplier(float multiplier);  // Multiplier of note frequency (0.5 - 20.0)
+    void setFilterResonance(float q);            // Q factor (0.7 - 5.0)
+    
+    // Crossfade control
+    void setCrossfadeDuration(float milliseconds);  // Duration of filter crossfade
     
     // Audio output
     AudioStream* getOutput();
@@ -63,13 +67,27 @@ private:
     // Low-pass filters - one per voice
     AudioFilterStateVariable filters[VOICES_PER_INSTRUMENT];
     
-    // Audio mixing - combines 4 voices
+    // Delayed faders for crossfade - one pair per voice
+    DelayedFader filteredFaders[VOICES_PER_INSTRUMENT];    // Fade in filtered signal
+    DelayedFader unfilteredFaders[VOICES_PER_INSTRUMENT];  // Fade out unfiltered signal
+    
+    // Crossfade mixers - one per voice (combines filtered + unfiltered)
+    AudioMixer4 crossfadeMixers[VOICES_PER_INSTRUMENT];
+    
+    // Final voice mixer - combines all 4 voices
     AudioMixer4 mixer;
     
-    // Audio connections: voice → envelope → filter → mixer
+    // Audio connections: 
+    // voice → envelope → filter → filteredFader → crossfadeMixer[0]
+    //                  → unfilteredFader → crossfadeMixer[1]
+    //                     crossfadeMixer → mixer
     AudioConnection* voiceConnections[VOICES_PER_INSTRUMENT];
-    AudioConnection* envelopeConnections[VOICES_PER_INSTRUMENT];
-    AudioConnection* filterConnections[VOICES_PER_INSTRUMENT];
+    AudioConnection* envelopeToFilterConnections[VOICES_PER_INSTRUMENT];
+    AudioConnection* envelopeToUnfilteredConnections[VOICES_PER_INSTRUMENT];
+    AudioConnection* filterToFaderConnections[VOICES_PER_INSTRUMENT];
+    AudioConnection* filteredToMixerConnections[VOICES_PER_INSTRUMENT];
+    AudioConnection* unfilteredToMixerConnections[VOICES_PER_INSTRUMENT];
+    AudioConnection* crossfadeToFinalConnections[VOICES_PER_INSTRUMENT];
     
     // SoundFont reader
     SF22ASWTreader sf2Reader;
@@ -101,10 +119,14 @@ private:
     float releaseMs;
     
     // Filter parameters
-    float filterFrequency;  // Hz
-    float filterResonance;  // Q factor
+    float filterMultiplier;  // Multiplier of note frequency
+    float filterResonance;   // Q factor
+    
+    // Crossfade parameters
+    float crossfadeDurationMs;  // Duration of filter crossfade in ms
     
     // Helper methods
+    void updateFaderDelays();  // Update fader delays based on ADSR attack+decay
     int findAvailableVoice();
     int findVoicePlayingNote(int midiNote);
     int findOldestVoice();

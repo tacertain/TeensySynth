@@ -28,6 +28,10 @@ void CC_SoundfontRelease(MIDIController* controller, byte channel, byte control,
 
 // Soundfont filter controls
 void CC_SoundfontFilterFrequency(MIDIController* controller, byte channel, byte control, byte value);
+void CC_SoundfontFilterResonance(MIDIController* controller, byte channel, byte control, byte value);
+
+// Soundfont crossfade controls
+void CC_SoundfontCrossfadeDuration(MIDIController* controller, byte channel, byte control, byte value);
 
 // String pad controls
 void CC_StringPadVolume(MIDIController* controller, byte channel, byte control, byte value);

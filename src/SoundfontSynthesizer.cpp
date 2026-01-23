@@ -184,15 +184,21 @@ void SoundfontSynthesizer::setRelease(float milliseconds) {
     }
 }
 
-void SoundfontSynthesizer::setFilterFrequency(float frequency) {
+void SoundfontSynthesizer::setFilterMultiplier(float multiplier) {
     for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
-        instruments[i].setFilterFrequency(frequency);
+        instruments[i].setFilterMultiplier(multiplier);
     }
 }
 
 void SoundfontSynthesizer::setFilterResonance(float q) {
     for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
         instruments[i].setFilterResonance(q);
+    }
+}
+
+void SoundfontSynthesizer::setCrossfadeDuration(float milliseconds) {
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        instruments[i].setCrossfadeDuration(milliseconds);
     }
 }
 

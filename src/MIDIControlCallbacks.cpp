@@ -83,10 +83,24 @@ void CC_SoundfontRelease(MIDIController* controller, byte channel, byte control,
 }
 
 void CC_SoundfontFilterFrequency(MIDIController* controller, byte channel, byte control, byte value) {
-    // Map 0-127 to 100Hz - 12000Hz (exponential)
-    float frequency = 100.0f * pow(120.0f, (float)value / 127.0f);
-    controller->getSynth().getSoundfont().setFilterFrequency(frequency);
-    Serial.printf("Soundfont Filter Frequency: %.1f Hz (CC %d = %d)\n", frequency, control, value);
+    // Map 0-127 to 0.5 - 20.0 (exponential) - multiplier of note frequency
+    float multiplier = 0.5f * pow(40.0f, (float)value / 127.0f);
+    controller->getSynth().getSoundfont().setFilterMultiplier(multiplier);
+    Serial.printf("Soundfont Filter Multiplier: %.2fx (CC %d = %d)\n", multiplier, control, value);
+}
+
+void CC_SoundfontFilterResonance(MIDIController* controller, byte channel, byte control, byte value) {
+    // Map 0-127 to 0.7 - 5.0 (linear)
+    float q = 0.7f + ((float)value / 127.0f) * 4.3f;
+    controller->getSynth().getSoundfont().setFilterResonance(q);
+    Serial.printf("Soundfont Filter Resonance: %.2f (CC %d = %d)\n", q, control, value);
+}
+
+void CC_SoundfontCrossfadeDuration(MIDIController* controller, byte channel, byte control, byte value) {
+    // Map 0-127 to 10ms - 5000ms (exponential)
+    float durationMs = 10.0f * pow(500.0f, (float)value / 127.0f);
+    controller->getSynth().getSoundfont().setCrossfadeDuration(durationMs);
+    Serial.printf("Soundfont Crossfade Duration: %.1f ms (CC %d = %d)\n", durationMs, control, value);
 }
 
 void CC_StringPadVolume(MIDIController* controller, byte channel, byte control, byte value) {
@@ -170,6 +184,12 @@ void CC_ModeSoundfontTrombone(MIDIController* controller, byte channel, byte con
             controller->getSynth().getSoundfont().unloadInstrument(i);
         }
         
+        // Reset ADSR to defaults
+        controller->getSynth().getSoundfont().setAttack(5.0f);
+        controller->getSynth().getSoundfont().setDecay(200.0f);
+        controller->getSynth().getSoundfont().setSustain(0.4f);
+        controller->getSynth().getSoundfont().setRelease(300.0f);
+        
         Serial.println("Mode switched to SOUNDFONT, loading trombone.sf2...");
         bool success = controller->getSynth().getSoundfont().loadInstrument(0, "trombone.sf2", 0);
         if (success) {
@@ -193,6 +213,13 @@ void CC_ModeTusk(MIDIController* controller, byte channel, byte control, byte va
         controller->getSynth().setSynthMode(HybridSynthesizer::TUSK);
         installBank2ForMode(controller, true);
         controller->getSynth().setSplitPoint(60);
+        
+        // Reset ADSR to defaults
+        controller->getSynth().getSoundfont().setAttack(5.0f);
+        controller->getSynth().getSoundfont().setDecay(200.0f);
+        controller->getSynth().getSoundfont().setSustain(0.4f);
+        controller->getSynth().getSoundfont().setRelease(300.0f);
+        
         Serial.print("Mode: TUSK - Soundfont split mode (instrument 0 above split, instrument 1 below) (CC ");
         Serial.print(control);
         Serial.println(")");
@@ -212,6 +239,12 @@ void CC_ModeSoundfontTromboneTusk(MIDIController* controller, byte channel, byte
         for (int i = 0; i < 4; i++) {
             controller->getSynth().getSoundfont().unloadInstrument(i);
         }
+        
+        // Reset ADSR to defaults
+        controller->getSynth().getSoundfont().setAttack(5.0f);
+        controller->getSynth().getSoundfont().setDecay(200.0f);
+        controller->getSynth().getSoundfont().setSustain(0.4f);
+        controller->getSynth().getSoundfont().setRelease(300.0f);
         
         Serial.println("Mode switched to SOUNDFONT, loading trombone_tusk.sf2...");
         bool success = controller->getSynth().getSoundfont().loadInstrument(1, "trombone_tusk.sf2", 0);
@@ -241,6 +274,12 @@ void CC_ModeSoundfontTrumpetTusk(MIDIController* controller, byte channel, byte 
             controller->getSynth().getSoundfont().unloadInstrument(i);
         }
         
+        // Reset ADSR to defaults
+        controller->getSynth().getSoundfont().setAttack(5.0f);
+        controller->getSynth().getSoundfont().setDecay(200.0f);
+        controller->getSynth().getSoundfont().setSustain(0.4f);
+        controller->getSynth().getSoundfont().setRelease(300.0f);
+        
         Serial.println("Mode switched to SOUNDFONT, loading trumpet_tusk.sf2...");
         bool success = controller->getSynth().getSoundfont().loadInstrument(0, "trumpet_tusk.sf2", 0);
         if (success) {
@@ -264,6 +303,13 @@ void CC_ModeTuskChord(MIDIController* controller, byte channel, byte control, by
         controller->getSynth().setSynthMode(HybridSynthesizer::TUSK_CHORD);
         installBank2ForMode(controller, true);
         controller->getSynth().setSplitPoint(60);
+        
+        // Reset ADSR to defaults
+        controller->getSynth().getSoundfont().setAttack(5.0f);
+        controller->getSynth().getSoundfont().setDecay(200.0f);
+        controller->getSynth().getSoundfont().setSustain(0.4f);
+        controller->getSynth().getSoundfont().setRelease(300.0f);
+        
         Serial.print("Mode: TUSK_CHORD - Soundfont split mode with chord support (CC ");
         Serial.print(control);
         Serial.println(")");
@@ -333,6 +379,8 @@ const MIDIControllerChannelCallback channel1Bank_21_30_SF[] = {
     { 23, CC_SoundfontSustain },
     { 24, CC_SoundfontRelease },
     { 25, CC_SoundfontFilterFrequency },
+    { 26, CC_SoundfontFilterResonance },
+    { 27, CC_SoundfontCrossfadeDuration },
 };
 const size_t channel1Bank_21_30_SF_count = sizeof(channel1Bank_21_30_SF) / sizeof(channel1Bank_21_30_SF[0]);
 

@@ -12,8 +12,9 @@ SoundfontInstrument::SoundfontInstrument()
     , decayMs(200.0f)
     , sustainLevel(0.4f)
     , releaseMs(300.0f)
-    , filterFrequency(8000.0f)
-    , filterResonance(0.7f)
+    , filterMultiplier(5.0f)
+    , filterResonance(1.0f)
+    , crossfadeDurationMs(100.0f)
 {
     name[0] = '\0';
     filename[0] = '\0';
@@ -24,15 +25,32 @@ SoundfontInstrument::SoundfontInstrument()
         voiceStates[i].midiNote = -1;
         voiceStates[i].noteOnTime = 0;
         voiceConnections[i] = nullptr;
-        envelopeConnections[i] = nullptr;
-        filterConnections[i] = nullptr;
+        envelopeToFilterConnections[i] = nullptr;
+        envelopeToUnfilteredConnections[i] = nullptr;
+        filterToFaderConnections[i] = nullptr;
+        filteredToMixerConnections[i] = nullptr;
+        unfilteredToMixerConnections[i] = nullptr;
+        crossfadeToFinalConnections[i] = nullptr;
     }
     
-    // Connect voices → envelopes → filters → mixer
+    // Connect audio routing:
+    // voice → envelope → filter → filteredFader → crossfadeMixer[0]
+    //                  → unfilteredFader → crossfadeMixer[1]
+    //                     crossfadeMixer → finalMixer
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
         voiceConnections[i] = new AudioConnection(voices[i], 0, envelopes[i], 0);
-        envelopeConnections[i] = new AudioConnection(envelopes[i], 0, filters[i], 0);
-        filterConnections[i] = new AudioConnection(filters[i], 0, mixer, i);
+        
+        // Filtered path
+        envelopeToFilterConnections[i] = new AudioConnection(envelopes[i], 0, filters[i], 0);
+        filterToFaderConnections[i] = new AudioConnection(filters[i], 0, filteredFaders[i], 0);
+        filteredToMixerConnections[i] = new AudioConnection(filteredFaders[i], 0, crossfadeMixers[i], 0);
+        
+        // Unfiltered path
+        envelopeToUnfilteredConnections[i] = new AudioConnection(envelopes[i], 0, unfilteredFaders[i], 0);
+        unfilteredToMixerConnections[i] = new AudioConnection(unfilteredFaders[i], 0, crossfadeMixers[i], 1);
+        
+        // Crossfade mixer to final mixer
+        crossfadeToFinalConnections[i] = new AudioConnection(crossfadeMixers[i], 0, mixer, i);
         
         // Set default ADSR parameters
         envelopes[i].attack(attackMs);
@@ -40,10 +58,18 @@ SoundfontInstrument::SoundfontInstrument()
         envelopes[i].sustain(sustainLevel);
         envelopes[i].release(releaseMs);
         
-        // Set default filter parameters
-        filters[i].frequency(filterFrequency);
+        // Set default filter parameters (frequency will be set per-note)
         filters[i].resonance(filterResonance);
+        
+        // Set crossfade mixer gains (equal mix initially)
+        crossfadeMixers[i].gain(0, 1.0f);  // Filtered
+        crossfadeMixers[i].gain(1, 1.0f);  // Unfiltered
+        crossfadeMixers[i].gain(2, 0.0f);  // Unused
+        crossfadeMixers[i].gain(3, 0.0f);  // Unused
     }
+    
+    // Initialize fader delays based on attack + decay
+    updateFaderDelays();
     
     // Set initial mixer gains
     updateMixerGains();
@@ -53,8 +79,12 @@ SoundfontInstrument::~SoundfontInstrument() {
     // Clean up audio connections
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
         delete voiceConnections[i];
-        delete envelopeConnections[i];
-        delete filterConnections[i];
+        delete envelopeToFilterConnections[i];
+        delete envelopeToUnfilteredConnections[i];
+        delete filterToFaderConnections[i];
+        delete filteredToMixerConnections[i];
+        delete unfilteredToMixerConnections[i];
+        delete crossfadeToFinalConnections[i];
     }
     
     // Clean up instrument data
@@ -198,6 +228,12 @@ void SoundfontInstrument::noteOn(int midiNote, float velocity) {
     // Set the instrument on this voice
     voices[voiceIndex].setInstrument(*instrumentData);
     
+    // Calculate note frequency and set filter cutoff
+    float noteFreq = AudioSynthWavetable::noteToFreq(midiNote);
+    float filterFreq = noteFreq * filterMultiplier;
+    filterFreq = constrain(filterFreq, 20.0f, 20000.0f);
+    filters[voiceIndex].frequency(filterFreq);
+    
     // Convert velocity to 0-127 range for AudioSynthWavetable
     int vel = constrain(velocity * 127.0f, 0, 127);
     
@@ -217,6 +253,11 @@ void SoundfontInstrument::noteOn(int midiNote, float velocity) {
     
     // Trigger envelope
     envelopes[voiceIndex].noteOn();
+    
+    // Trigger crossfade: fade in filtered, fade out unfiltered
+    uint32_t delayMs = attackMs + decayMs;
+    filteredFaders[voiceIndex].fadeIn(crossfadeDurationMs, delayMs);
+    unfilteredFaders[voiceIndex].fadeOut(crossfadeDurationMs, delayMs);
     
     // Update voice state
     voiceStates[voiceIndex].active = true;
@@ -274,6 +315,7 @@ void SoundfontInstrument::setAttack(float milliseconds) {
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
         envelopes[i].attack(attackMs);
     }
+    updateFaderDelays();
 }
 
 void SoundfontInstrument::setDecay(float milliseconds) {
@@ -281,6 +323,7 @@ void SoundfontInstrument::setDecay(float milliseconds) {
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
         envelopes[i].decay(decayMs);
     }
+    updateFaderDelays();
 }
 
 void SoundfontInstrument::setSustain(float level) {
@@ -304,10 +347,17 @@ void SoundfontInstrument::setADSR(float attack, float decay, float sustain, floa
     setRelease(release);
 }
 
-void SoundfontInstrument::setFilterFrequency(float frequency) {
-    filterFrequency = constrain(frequency, 20.0f, 20000.0f);
+void SoundfontInstrument::setFilterMultiplier(float multiplier) {
+    filterMultiplier = constrain(multiplier, 0.5f, 20.0f);
+    
+    // Update filter frequency for all active voices
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
-        filters[i].frequency(filterFrequency);
+        if (voiceStates[i].active && voiceStates[i].midiNote >= 0) {
+            float noteFreq = AudioSynthWavetable::noteToFreq(voiceStates[i].midiNote);
+            float filterFreq = noteFreq * filterMultiplier;
+            filterFreq = constrain(filterFreq, 20.0f, 20000.0f);
+            filters[i].frequency(filterFreq);
+        }
     }
 }
 
@@ -316,6 +366,15 @@ void SoundfontInstrument::setFilterResonance(float q) {
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
         filters[i].resonance(filterResonance);
     }
+}
+
+void SoundfontInstrument::setCrossfadeDuration(float milliseconds) {
+    crossfadeDurationMs = constrain(milliseconds, 0.0f, 5000.0f);
+}
+
+void SoundfontInstrument::updateFaderDelays() {
+    // Fader delays are set dynamically in noteOn() based on current attack+decay
+    // This method is kept for future use if we need to update existing active fades
 }
 
 int SoundfontInstrument::findAvailableVoice() {
