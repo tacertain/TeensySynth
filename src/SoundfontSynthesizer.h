@@ -4,6 +4,7 @@
 #include <AudioStream.h>
 #include <SD.h>
 #include "SoundfontInstrument.h"
+#include "AudioPeakMonitor.h"
 
 /**
  * SoundfontSynthesizer
@@ -29,6 +30,7 @@ public:
     bool loadInstrument(int instrumentSlot, const char* filename, int instrumentIndex);
     bool isInstrumentLoaded(int instrumentSlot) const;
     const char* getInstrumentName(int instrumentSlot) const;
+    AudioSynthWavetable::instrument_data* getInstrumentData(int instrumentSlot) const;
     void unloadInstrument(int instrumentSlot);  // Unload instrument and free memory
     
     // Note control - polyphonic with instrument selection
@@ -57,6 +59,10 @@ public:
     // Audio outputs (mono output, duplicated to L/R by HybridSynthesizer)
     AudioStream* getLeftOutput();
     AudioStream* getRightOutput();
+    
+    // Debug/monitoring
+    void printPeakLevels();
+    void resetPeakMonitors();
 
 private:
     static const int MAX_INSTRUMENTS = 4;  // Maximum number of instruments
@@ -67,8 +73,14 @@ private:
     // Final mixer - combines all instruments
     AudioMixer4 finalMixer;
     
+    // Peak monitors for debugging levels
+    AudioPeakMonitor instrumentPeakMonitors[MAX_INSTRUMENTS];  // Before finalMixer
+    AudioPeakMonitor outputPeakMonitor;                         // After finalMixer
+    
     // Audio connections - instrument outputs to final mixer
     AudioConnection* instrumentConnections[MAX_INSTRUMENTS];
+    AudioConnection* peakMonitorConnections[MAX_INSTRUMENTS];   // Instrument -> peak monitors
+    AudioConnection* outputPeakConnection;                       // finalMixer -> output peak monitor
     
     // State
     bool initialized;

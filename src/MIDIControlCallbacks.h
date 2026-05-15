@@ -33,6 +33,15 @@ void CC_SoundfontFilterResonance(MIDIController* controller, byte channel, byte 
 // Soundfont crossfade controls
 void CC_SoundfontCrossfadeDuration(MIDIController* controller, byte channel, byte control, byte value);
 
+// Soundfont volume (shared with Whitesnake pad — both feed mixerL6/R6)
+void CC_SoundfontVolume(MIDIController* controller, byte channel, byte control, byte value);
+
+// Whitesnake pad ADSR controls (target SoundfontPadSynthesizer)
+void CC_WhitesnakePadAttack(MIDIController* controller, byte channel, byte control, byte value);
+void CC_WhitesnakePadDecay(MIDIController* controller, byte channel, byte control, byte value);
+void CC_WhitesnakePadSustain(MIDIController* controller, byte channel, byte control, byte value);
+void CC_WhitesnakePadRelease(MIDIController* controller, byte channel, byte control, byte value);
+
 // String pad controls
 void CC_StringPadVolume(MIDIController* controller, byte channel, byte control, byte value);
 void CC_StringPadFilterCutoff(MIDIController* controller, byte channel, byte control, byte value);
@@ -47,7 +56,7 @@ void CC_ModeStringPadsBright(MIDIController* controller, byte channel, byte cont
 void CC_ModeSoundfontTrombone(MIDIController* controller, byte channel, byte control, byte value);
 void CC_ModeTusk(MIDIController* controller, byte channel, byte control, byte value);
 void CC_ModeSoundfontTromboneTusk(MIDIController* controller, byte channel, byte control, byte value);
-void CC_ModeSoundfontTrumpetTusk(MIDIController* controller, byte channel, byte control, byte value);
+void CC_ModeWhitesnake(MIDIController* controller, byte channel, byte control, byte value);
 void CC_ModeTuskChord(MIDIController* controller, byte channel, byte control, byte value);
 void CC_CycleStringPadChordMode(MIDIController* controller, byte channel, byte control, byte value);
 
@@ -72,6 +81,10 @@ extern const size_t channel1Bank_21_30_count;
 extern const MIDIControllerChannelCallback channel1Bank_21_30_SF[];
 extern const size_t channel1Bank_21_30_SF_count;
 
+// Bank 2 (alternate): CC 20-29 - Whitesnake pad ADSR controls (CC 21-24 only; pad has no filter/crossfade)
+extern const MIDIControllerChannelCallback channel1Bank_21_30_PAD[];
+extern const size_t channel1Bank_21_30_PAD_count;
+
 // Bank 3: CC 30-39 - (currently unused)
 extern const MIDIControllerChannelCallback channel1Bank_31_40[];
 extern const size_t channel1Bank_31_40_count;
@@ -90,3 +103,6 @@ extern const size_t channel1Bank_51_60_count;
 
 // Install bank 2 callbacks appropriate for soundfont or non-soundfont modes
 void installBank2ForMode(MIDIController* controller, bool isSoundfontMode);
+
+// Install bank 2 callbacks for the Whitesnake pad synth (CC 21-24 only)
+void installBank2ForWhitesnakePad(MIDIController* controller);

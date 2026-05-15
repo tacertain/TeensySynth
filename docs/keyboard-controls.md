@@ -43,6 +43,13 @@ The synthesizer has multiple synthesis modes:
 - **Above Middle C**: Soundfont instrument 0 (typically lead/high sounds)
 - **Perfect for expressive performance** with different timbres across the keyboard
 
+### 7. **WHITESNAKE** Mode
+- **Prophet VS pad** mode targeting the keys sound from "Here I Go Again" (1987)
+- Loads `whitesnake.sf2` via a dedicated lean pad synth (`SoundfontPadSynthesizer`) — no per-voice filter or crossfade
+- **8-voice polyphony** to absorb note overlap during the long 800 ms release
+- Standard polyphonic playback across the full keyboard — no split point
+- CC 21-24 control the pad ADSR live (see Soundfont Synthesizer Controls). CC 25-27 are inert in WHITESNAKE since the pad has no filter or crossfade.
+
 ## Control Methods
 
 ### MIDI Control Change Messages (CC)
@@ -51,9 +58,13 @@ Connect a MIDI controller or DAW for real-time parameter control:
 #### Mode Switching (Channel 1)
 - **CC 51** (value 127): Switch to Plucked Strings
 - **CC 52** (value 127): Switch to Drone mode
-- **CC 53** (value 127): String Pads + **"Bright Strings"** preset  
-- **CC 54** (value 127): Switch to Soundfont mode and load "trumpet.sf2"
-- **CC 55** (value 127): Switch to **TUSK mode** - Soundfont split mode with instrument 0 above split point, instrument 1 below 
+- **CC 53** (value 127): String Pads + **"Bright Strings"** preset
+- **CC 54** (value 127): Switch to Soundfont mode and load `trombone.sf2` (experimental SF slot)
+- **CC 55** (value 127): Switch to **TUSK mode** - Soundfont split mode with instrument 0 above split point, instrument 1 below
+- **CC 56** (value 127): Switch to Soundfont mode and load `trombone_tusk.sf2` into slot 1 (experimental SF slot)
+- **CC 57** (value 127): Switch to **WHITESNAKE mode** - loads `whitesnake.sf2` (Prophet VS pad for "Here I Go Again")
+- **CC 58** (value 127): Switch to **TUSK_CHORD mode** - TUSK split with chord-mapping above the split point
+- **CC 59** (value 127): Cycle String Pad Chord Mode (see below)
 
 #### Volume Controls (Channel 1)
 - **CC 7**: Master Volume (0-127) - Controls overall output level
@@ -72,6 +83,21 @@ Connect a MIDI controller or DAW for real-time parameter control:
   - Values 65-127 = positive detune
 - **CC 27**: LFO Depth (0-127) - Amount of filter modulation (0 = no LFO effect, 127 = maximum sweep)
 
+> **Note:** CC 21-27 are dual-purpose. The mappings above (and the String CC 21/22 / Drone Volume CC 23 above them) apply in non-soundfont modes. When any soundfont mode is active (SOUNDFONT, TUSK, TUSK_CHORD, WHITESNAKE), CC 21-27 reroute to the Soundfont Synthesizer Controls below.
+
+#### Soundfont Synthesizer Controls (Channel 1) — active in SOUNDFONT, TUSK, TUSK_CHORD, WHITESNAKE
+- **CC 21**: Attack (0-127) — exponential, 0.5 ms – 2000 ms
+- **CC 22**: Decay (0-127) — exponential, 0.5 ms – 2000 ms
+- **CC 23**: Sustain (0-127) — linear, 0.0 – 1.0
+- **CC 24**: Release (0-127) — exponential, 5 ms – 5000 ms
+- **CC 25**: Filter Cutoff (0-127) — exponential multiplier of note frequency, 0.5× – 20× *(SOUNDFONT/TUSK/TUSK_CHORD only)*
+- **CC 26**: Filter Resonance (0-127) — linear Q, 0.7 – 5.0 *(SOUNDFONT/TUSK/TUSK_CHORD only)*
+- **CC 27**: Crossfade Duration (0-127) — exponential, 10 ms – 5000 ms *(SOUNDFONT/TUSK/TUSK_CHORD only)*
+
+*Note: ADSR settings layer on top of the SF2's own envelope. The SF2's envelope shapes the wavetable output; the Teensy envelope shapes that further before the filter.*
+
+*Note: CC 21-24 dispatch to the active soundfont engine — the recorded-instrument `SoundfontSynthesizer` in SOUNDFONT/TUSK/TUSK_CHORD modes, the lean `SoundfontPadSynthesizer` in WHITESNAKE.*
+
 #### String Pad Synthesizer Controls (Channel 1) - 6-Voice Polyphonic
 - **CC 41**: String Pad Volume (0-127) - Controls overall string pad level
 - **CC 42**: String Pad Filter Cutoff (0-127) - Filter brightness for all voices (200-2000 Hz range) 
@@ -84,7 +110,6 @@ Connect a MIDI controller or DAW for real-time parameter control:
   - **Uses exponential mapping** for smooth control across the range
 
 #### Mode and Chord Controls (Channel 1)
-- **CC 58** (value 127): Toggle **Split Mode** - Drone below Middle C, String Pads above Middle C+12
 - **CC 59** (value 127): Cycle **String Pad Chord Mode**:
   - **First press**: Major Chord Mode (6-note major chords: root + 3rd + 5th across two octaves)
   - **Second press**: Octave Mode (2-note: root + octave)

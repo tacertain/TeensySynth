@@ -63,6 +63,18 @@ void MIDIController::begin() {
 void MIDIController::update() {
     usbHost.Task();
     midiDevice.read();
+
+    // Drive the chord-velocity capture window. Only meaningful in WHITESNAKE;
+    // elsewhere we keep capture state reset so re-entering the mode starts clean.
+    if (synth.getCurrentMode() == HybridSynthesizer::WHITESNAKE) {
+        ChordVelocityCapture::PendingNote pending[ChordVelocityCapture::MAX_PENDING_OUT];
+        int n = chordCapture.tick(millis(), pending, ChordVelocityCapture::MAX_PENDING_OUT);
+        for (int i = 0; i < n; ++i) {
+            fireSynthNoteOn(pending[i].channel, pending[i].note, pending[i].velocity);
+        }
+    } else {
+        chordCapture.reset();
+    }
 }
 
 float MIDIController::midiNoteToFrequency(byte note) {
@@ -70,7 +82,11 @@ float MIDIController::midiNoteToFrequency(byte note) {
 }
 
 float MIDIController::midiVelocityToFloat(byte velocity) {
-    return (float)velocity / 128.0f;
+    // Piecewise-linear curve: floor of 0.2 at MIDI vel<=20, ceiling of 1.0 at vel>=70,
+    // linear ramp between. Compensates for keyboards with a poor native curve.
+    if (velocity <= 20) return 0.2f;
+    if (velocity >= 70) return 1.0f;
+    return 0.2f + (float)(velocity - 20) * (0.8f / 50.0f);
 }
 
 void MIDIController::handleNoteOn(byte channel, byte note, byte velocity) {
@@ -82,6 +98,20 @@ void MIDIController::handleNoteOn(byte channel, byte note, byte velocity) {
     Serial.print(velocity);
     Serial.println();
 
+    if (synth.getCurrentMode() == HybridSynthesizer::WHITESNAKE) {
+        auto result = chordCapture.onNoteOn(channel, note, velocity, millis());
+        if (result.fire) {
+            fireSynthNoteOn(channel, note, result.velocity);
+        } else {
+            Serial.println("  (buffered for chord-velocity capture)");
+        }
+    } else {
+        chordCapture.reset();
+        fireSynthNoteOn(channel, note, velocity);
+    }
+}
+
+void MIDIController::fireSynthNoteOn(byte channel, byte note, byte velocity) {
     float freq = midiNoteToFrequency(note);
     float vel = midiVelocityToFloat(velocity);
     Serial.print("Synthesizer.noteOn(");
@@ -99,6 +129,10 @@ void MIDIController::handleNoteOff(byte channel, byte note, byte velocity) {
     Serial.print(", note=");
     Serial.print(note);
     Serial.println();
+
+    if (synth.getCurrentMode() == HybridSynthesizer::WHITESNAKE) {
+        chordCapture.onNoteOff(note);
+    }
     synth.noteOff(channel, note);
 }
 

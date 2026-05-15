@@ -2,18 +2,25 @@
 #include <Arduino.h>
 
 SoundfontSynthesizer::SoundfontSynthesizer()
-    : initialized(false)
+    : outputPeakConnection(nullptr)
+    , initialized(false)
     , volume(1.0f)
 {
     // Initialize instrument connections
     for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
         instrumentConnections[i] = nullptr;
+        peakMonitorConnections[i] = nullptr;
     }
     
     // Connect instruments to final mixer
     for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
         instrumentConnections[i] = new AudioConnection(*instruments[i].getOutput(), 0, finalMixer, i);
+        // Connect instrument output to peak monitor (parallel path for monitoring)
+        peakMonitorConnections[i] = new AudioConnection(*instruments[i].getOutput(), 0, instrumentPeakMonitors[i], 0);
     }
+    
+    // Connect finalMixer output to output peak monitor
+    outputPeakConnection = new AudioConnection(finalMixer, 0, outputPeakMonitor, 0);
     
     // Set initial mixer gains
     updateMixerGains();
@@ -23,7 +30,9 @@ SoundfontSynthesizer::~SoundfontSynthesizer() {
     // Clean up audio connections
     for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
         delete instrumentConnections[i];
+        delete peakMonitorConnections[i];
     }
+    delete outputPeakConnection;
 }
 
 bool SoundfontSynthesizer::begin() {
@@ -88,6 +97,13 @@ const char* SoundfontSynthesizer::getInstrumentName(int instrumentSlot) const {
         return "";
     }
     return instruments[instrumentSlot].getName();
+}
+
+AudioSynthWavetable::instrument_data* SoundfontSynthesizer::getInstrumentData(int instrumentSlot) const {
+    if (instrumentSlot < 0 || instrumentSlot >= MAX_INSTRUMENTS) {
+        return nullptr;
+    }
+    return instruments[instrumentSlot].getInstrumentData();
 }
 
 void SoundfontSynthesizer::unloadInstrument(int instrumentSlot) {
@@ -220,4 +236,33 @@ void SoundfontSynthesizer::updateMixerGains() {
     for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
         finalMixer.gain(i, finalMixerGain);
     }
+}
+
+void SoundfontSynthesizer::printPeakLevels() {
+    Serial.println("=== SoundfontSynthesizer Peak Levels ===");
+    
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        Serial.print("  Instrument ");
+        Serial.print(i);
+        Serial.print(" (");
+        Serial.print(instruments[i].isLoaded() ? instruments[i].getName() : "empty");
+        Serial.print("): min=");
+        Serial.print(instrumentPeakMonitors[i].getMin());
+        Serial.print(" max=");
+        Serial.println(instrumentPeakMonitors[i].getMax());
+    }
+    
+    Serial.print("  FinalMixer output: min=");
+    Serial.print(outputPeakMonitor.getMin());
+    Serial.print(" max=");
+    Serial.println(outputPeakMonitor.getMax());
+    
+    Serial.println("========================================");
+}
+
+void SoundfontSynthesizer::resetPeakMonitors() {
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        instrumentPeakMonitors[i].reset();
+    }
+    outputPeakMonitor.reset();
 }

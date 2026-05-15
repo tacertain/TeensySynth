@@ -6,6 +6,7 @@
 
 // Project headers
 #include "HybridSynthesizer.h"
+#include "ChordVelocityCapture.h"
 
 // Forward declaration
 class MIDIController;
@@ -57,8 +58,12 @@ private:
     static const size_t MAX_BANKS = 13;  // Covers CC 0-127
     const MIDIControllerChannelCallback* callbackTables[MAX_BANKS];
     size_t callbackCounts[MAX_BANKS];
-    
+
+    // Velocity-unification for chords. Active only in WHITESNAKE mode.
+    ChordVelocityCapture chordCapture;
+
     // Helper functions for MIDI processing
     float midiNoteToFrequency(byte note);
     float midiVelocityToFloat(byte velocity);
+    void fireSynthNoteOn(byte channel, byte note, byte velocity);
 };

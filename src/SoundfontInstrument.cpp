@@ -133,12 +133,49 @@ bool SoundfontInstrument::loadInstrument(const char* filename, int instrumentInd
     
     if (sf2Reader.ReadFile(fullPath)) {
         if (sf2Reader.Load_instrument_data(instrumentIndex, inst_temp)) {
+            // Some SF2 files (notably the Whitesnake VS pad we built) store
+            // sample zones in arbitrary file order. Polyphone's UI displays
+            // them sorted, but the Teensy AudioSynthWavetable engine assumes
+            // sample_note_ranges is ascending — its lookup loop stops at the
+            // first range >= note, so unsorted zones route notes to the wrong
+            // sample. Sort the parallel arrays here, before sample audio data
+            // is loaded or converted.
+            for (int i = 0; i < inst_temp.sample_count - 1; ++i) {
+                for (int j = 0; j < inst_temp.sample_count - 1 - i; ++j) {
+                    if (inst_temp.sample_note_ranges[j] > inst_temp.sample_note_ranges[j + 1]) {
+                        uint8_t tmpRange = inst_temp.sample_note_ranges[j];
+                        inst_temp.sample_note_ranges[j] = inst_temp.sample_note_ranges[j + 1];
+                        inst_temp.sample_note_ranges[j + 1] = tmpRange;
+                        SF22ASWT::sample_header_temp tmpSample = inst_temp.samples[j];
+                        inst_temp.samples[j] = inst_temp.samples[j + 1];
+                        inst_temp.samples[j + 1] = tmpSample;
+                    }
+                }
+            }
+
             // Store cents offsets before conversion
             sampleCount = inst_temp.sample_count;
             centsOffsets = new int[sampleCount];
             for (int i = 0; i < sampleCount; ++i) {
                 centsOffsets[i] = inst_temp.samples[i].CENTS_OFFSET;
             }
+
+            // DEBUG: dump per-sample metadata as read from the SF2 file
+            // (compare against what Polyphone shows for the same file)
+            Serial.printf("=== SF22ASWT load dump: %s [%d] ===\n", fullPath, instrumentIndex);
+            Serial.printf("sample_count=%u\n", inst_temp.sample_count);
+            int rangeLow = 0;
+            for (int i = 0; i < inst_temp.sample_count; ++i) {
+                int rangeHigh = inst_temp.sample_note_ranges[i];
+                const SF22ASWT::sample_header_temp& s = inst_temp.samples[i];
+                Serial.printf(
+                    "  [%d] range=%d-%d  rootNote=%d  centsOffset=%d  sampleRate=%.1f  length=%d  loop=%d  loopStart=%d  loopEnd=%d\n",
+                    i, rangeLow, rangeHigh,
+                    s.SAMPLE_NOTE, s.CENTS_OFFSET, s.SAMPLE_RATE,
+                    s.LENGTH, (int)s.LOOP, s.LOOP_START, s.LOOP_END);
+                rangeLow = rangeHigh + 1;
+            }
+            Serial.println("=== end dump ===");
             
             // Load sample data and convert to AudioSynthWavetable format
             if (sf2Reader.ReadSampleDataFromFile(inst_temp)) {
@@ -378,8 +415,10 @@ void SoundfontInstrument::updateFaderDelays() {
 }
 
 int SoundfontInstrument::findAvailableVoice() {
+    // A voice is only truly free when the key is up AND the envelope has
+    // finished its release tail. Otherwise we'd cut off releasing notes.
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
-        if (!voiceStates[i].active) {
+        if (!voiceStates[i].active && !envelopes[i].isActive()) {
             return i;
         }
     }
@@ -396,23 +435,35 @@ int SoundfontInstrument::findVoicePlayingNote(int midiNote) {
 }
 
 int SoundfontInstrument::findOldestVoice() {
-    int oldestIndex = 0;
-    unsigned long oldestTime = voiceStates[0].noteOnTime;
-    
-    for (int i = 1; i < VOICES_PER_INSTRUMENT; ++i) {
-        if (voiceStates[i].noteOnTime < oldestTime) {
-            oldestTime = voiceStates[i].noteOnTime;
-            oldestIndex = i;
+    // Prefer to steal a releasing voice (key already up) over a held one.
+    int oldestReleasingIndex = -1;
+    unsigned long oldestReleasingTime = 0;
+    int oldestActiveIndex = -1;
+    unsigned long oldestActiveTime = 0;
+
+    for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
+        if (voiceStates[i].active) {
+            if (oldestActiveIndex == -1 || voiceStates[i].noteOnTime < oldestActiveTime) {
+                oldestActiveTime = voiceStates[i].noteOnTime;
+                oldestActiveIndex = i;
+            }
+        } else if (envelopes[i].isActive()) {
+            if (oldestReleasingIndex == -1 || voiceStates[i].noteOnTime < oldestReleasingTime) {
+                oldestReleasingTime = voiceStates[i].noteOnTime;
+                oldestReleasingIndex = i;
+            }
         }
     }
-    
-    return oldestIndex;
+
+    if (oldestReleasingIndex != -1) return oldestReleasingIndex;
+    if (oldestActiveIndex != -1) return oldestActiveIndex;
+    return 0;
 }
 
 void SoundfontInstrument::updateMixerGains() {
     // Apply volume to all mixer channels (4 voices max)
     // Use 0.25 gain per voice to prevent overflow when all 4 are active
     for (int i = 0; i < VOICES_PER_INSTRUMENT; ++i) {
-        mixer.gain(i, volume * 0.25f);
+        mixer.gain(i, volume);
     }
 }

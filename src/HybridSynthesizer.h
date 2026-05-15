@@ -13,6 +13,7 @@
 #include "StringsSynthesizer.h"
 #include "StringPadSynthesizer.h"
 #include "SoundfontSynthesizer.h"
+#include "SoundfontPadSynthesizer.h"
 
 class HybridSynthesizer {
 public:
@@ -24,7 +25,8 @@ public:
         SPLIT,              // Split mode: drone below split point, string pads above
         IRAN,               // Special mode for I Ran
         TUSK,               // Soundfont split mode: instrument 0 above split, instrument 1 below
-        TUSK_CHORD          // Soundfont split mode with chord support (same as TUSK for now)
+        TUSK_CHORD,         // Soundfont split mode with chord support (same as TUSK for now)
+        WHITESNAKE          // Whitesnake VS pad: soundfont instrument 0 from whitesnake.sf2
     };
 
 private:
@@ -39,6 +41,9 @@ private:
     
     // Soundfont synthesizer
     SoundfontSynthesizer soundfont;
+
+    // Whitesnake pad synthesizer (lean, no filter/crossfade, 8 voices)
+    SoundfontPadSynthesizer whitesnakePad;
     
     // Audio mixing and output
     AudioMixer4 mixerL4, mixerR4;  // Drone mixers
@@ -46,6 +51,7 @@ private:
     AudioMixer4 mixerL6, mixerR6;  // Soundfont mixers
     AudioMixer4 sumL, sumR;
     AudioPeakMonitor peakMonitorL, peakMonitorR;  // Peak monitors for left and right channels
+    AudioPeakMonitor whitesnakePadPeakMonitor;    // Peak monitor for the Whitesnake pad (mono)
     AudioOutputI2S i2s1;
 #ifdef USB_AUDIO
     AudioOutputUSB usb2;
@@ -60,9 +66,12 @@ private:
     AudioConnection* stringPadPatchCordR;  // String pad to mixer
     AudioConnection* soundfontPatchCordL;  // Soundfont to mixer
     AudioConnection* soundfontPatchCordR;  // Soundfont to mixer
+    AudioConnection* whitesnakePadPatchCordL;  // Whitesnake pad to mixer
+    AudioConnection* whitesnakePadPatchCordR;  // Whitesnake pad to mixer
     AudioConnection* patchCordSumL1, *patchCordSumL4, *patchCordSumL5, *patchCordSumL6;
     AudioConnection* patchCordSumR1, *patchCordSumR4, *patchCordSumR5, *patchCordSumR6;
     AudioConnection* patchCordMonitorL, *patchCordMonitorR;  // Connections to peak monitors
+    AudioConnection* patchCordWhitesnakePadMonitor;          // Whitesnake pad to its peak monitor
     AudioConnection* patchCordL;
     AudioConnection* patchCordR;
     AudioConnection *patchCordUsbL;
@@ -108,9 +117,12 @@ public:
         stringPadPatchCordR(nullptr),
         soundfontPatchCordL(nullptr),
         soundfontPatchCordR(nullptr),
+        whitesnakePadPatchCordL(nullptr),
+        whitesnakePadPatchCordR(nullptr),
         patchCordSumL1(nullptr), patchCordSumL4(nullptr), patchCordSumL5(nullptr), patchCordSumL6(nullptr),
         patchCordSumR1(nullptr), patchCordSumR4(nullptr), patchCordSumR5(nullptr), patchCordSumR6(nullptr),
         patchCordMonitorL(nullptr), patchCordMonitorR(nullptr),
+        patchCordWhitesnakePadMonitor(nullptr),
         patchCordL(nullptr),
         patchCordR(nullptr),
         patchCordUsbL(nullptr),
@@ -141,6 +153,10 @@ public:
         // Connect soundfont to mixerL6 and mixerR6 (mono to both channels)
         soundfontPatchCordL = new AudioConnection(*soundfont.getLeftOutput(), 0, mixerL6, 0);
         soundfontPatchCordR = new AudioConnection(*soundfont.getRightOutput(), 0, mixerR6, 0);
+
+        // Whitesnake pad shares mixerL6/R6 (slot 1) with soundfont — modes are mutually exclusive
+        whitesnakePadPatchCordL = new AudioConnection(*whitesnakePad.getOutput(), 0, mixerL6, 1);
+        whitesnakePadPatchCordR = new AudioConnection(*whitesnakePad.getOutput(), 0, mixerR6, 1);
         
         // Sum all mixers
         patchCordSumL1 = new AudioConnection(mixerL4, 0, sumL, 1);
@@ -157,6 +173,9 @@ public:
         // Connect sum outputs to peak monitors
         patchCordMonitorL = new AudioConnection(sumL, 0, peakMonitorL, 0);
         patchCordMonitorR = new AudioConnection(sumR, 0, peakMonitorR, 0);
+
+        // Tap the Whitesnake pad output for its own peak monitor (mono)
+        patchCordWhitesnakePadMonitor = new AudioConnection(*whitesnakePad.getOutput(), 0, whitesnakePadPeakMonitor, 0);
         
         // Final output to I2S
         patchCordL = new AudioConnection(sumL, 0, i2s1, 0);
@@ -177,6 +196,8 @@ public:
         delete stringPadPatchCordR;
         delete soundfontPatchCordL;
         delete soundfontPatchCordR;
+        delete whitesnakePadPatchCordL;
+        delete whitesnakePadPatchCordR;
         delete patchCordSumL1;
         delete patchCordSumL4;
         delete patchCordSumL5;
@@ -187,6 +208,7 @@ public:
         delete patchCordSumR6;
         delete patchCordMonitorL;
         delete patchCordMonitorR;
+        delete patchCordWhitesnakePadMonitor;
         delete patchCordL;
         delete patchCordR;
         delete patchCordUsbL;
@@ -194,11 +216,14 @@ public:
     }
     
     // Synthesis mode control
-    void setSynthMode(SynthMode mode) { 
+    SynthMode getCurrentMode() const { return currentMode; }
+
+    void setSynthMode(SynthMode mode) {
         // Print current peak levels before switching modes
-        const char* modeNames[] = {"PLUCKED_STRINGS", "DRONE", "STRING_PADS", "SOUNDFONT", "SPLIT", "IRAN", "TUSK", "TUSK_CHORD"};
-        const char* currentModeName = (currentMode >= 0 && currentMode < 7) ? modeNames[currentMode] : "UNKNOWN";
-        const char* newModeName = (mode >= 0 && mode < 7) ? modeNames[mode] : "UNKNOWN";
+        const char* modeNames[] = {"PLUCKED_STRINGS", "DRONE", "STRING_PADS", "SOUNDFONT", "SPLIT", "IRAN", "TUSK", "TUSK_CHORD", "WHITESNAKE"};
+        constexpr size_t numModeNames = sizeof(modeNames) / sizeof(modeNames[0]);
+        const char* currentModeName = (currentMode >= 0 && (size_t)currentMode < numModeNames) ? modeNames[currentMode] : "UNKNOWN";
+        const char* newModeName = (mode >= 0 && (size_t)mode < numModeNames) ? modeNames[mode] : "UNKNOWN";
         
         Serial.print("Switching from ");
         Serial.print(currentModeName);
@@ -318,7 +343,28 @@ public:
         
         Serial.println("Tusk Trumpet chord map loaded");
     }
-    
+
+    void loadWhitesnakeInstruments() {
+        Serial.println("Loading Whitesnake VS Pad...");
+        // Load via SoundfontSynthesizer slot 0 — same path that already works.
+        // Reusing slot 0's reader frees its prior samples (FreePrevSampleData) so the
+        // global SF22ASWT::samples_usedRam budget gets recycled properly.
+        bool ok = soundfont.loadInstrument(0, "whitesnake.sf2", 0);
+        if (ok) {
+            // Hand the loaded instrument_data pointer to the pad synth (borrowed; not owned)
+            whitesnakePad.setInstrumentData(soundfont.getInstrumentData(0));
+        } else {
+            Serial.println("Failed to load whitesnake.sf2 via SoundfontSynthesizer");
+            whitesnakePad.setInstrumentData(nullptr);
+        }
+
+        // Pad envelope on top of the sample's natural envelope
+        whitesnakePad.setAttack(5.0f);
+        whitesnakePad.setDecay(0.0f);
+        whitesnakePad.setSustain(1.0f);
+        whitesnakePad.setRelease(800.0f);
+    }
+
     // TUSK_CHORD helper methods
     void setChordPattern(int semitone, const int8_t* offsets, int noteCount) {
         // Set chord pattern for a specific semitone (0-11)
@@ -350,6 +396,7 @@ public:
     // Synthesizer access
     DroneSynthesizer& getDrone() { return drone; }
     StringPadSynthesizer& getStringPad() { return stringPad; }
+    SoundfontPadSynthesizer& getWhitesnakePad() { return whitesnakePad; }
 
     // Processing - call this regularly from main loop
     void update() {
@@ -382,6 +429,9 @@ public:
             break;
         case 8:
             mode = TUSK;
+            break;
+        case 9:
+            mode = WHITESNAKE;
             break;
         default:
             break;
@@ -464,7 +514,7 @@ public:
                     ActiveChord chord;
                     getChordForNote(key, chord);
                     activeChords[key] = chord; // Store for noteOff
-                    
+
                     for (int i = 0; i < chord.count; i++) {
                         int chordNote = chord.notes[i];
                         if (chordNote < splitPoint)
@@ -477,6 +527,9 @@ public:
                         }
                     }
                 }
+                break;
+            case WHITESNAKE:
+                whitesnakePad.noteOn(key, velocity);
                 break;
             }
     }
@@ -570,6 +623,9 @@ public:
                     }
                 }
                 break;
+            case WHITESNAKE:
+                whitesnakePad.noteOff(key);
+                break;
             }
     }
 
@@ -602,9 +658,11 @@ public:
     void resetPeakMonitors() {
         peakMonitorL.reset();
         peakMonitorR.reset();
+        whitesnakePadPeakMonitor.reset();
+        soundfont.resetPeakMonitors();
     }
-    
-    void printPeakLevels() const {
+
+    void printPeakLevels() {
         Serial.print("Peak Levels - L: min=");
         Serial.print(peakMonitorL.getMin());
         Serial.print(", max=");
@@ -617,6 +675,14 @@ public:
         Serial.print(AudioMemoryUsage());
         Serial.print("/");
         Serial.println(AudioMemoryUsageMax());
+
+        Serial.print("  WhitesnakePad: min=");
+        Serial.print(whitesnakePadPeakMonitor.getMin());
+        Serial.print(", max=");
+        Serial.println(whitesnakePadPeakMonitor.getMax());
+
+        // Print soundfont synthesizer peak levels
+        soundfont.printPeakLevels();
     }
 
 private:
@@ -643,9 +709,11 @@ private:
         mixerL5.gain(0, stringPadGain);
         mixerR5.gain(0, stringPadGain);
         
-        // Apply soundfont gains
+        // Apply soundfont gains (slot 1 carries whitesnakePad output; modes are mutually exclusive)
         mixerL6.gain(0, soundfontGain);
         mixerR6.gain(0, soundfontGain);
+        mixerL6.gain(1, soundfontGain);
+        mixerR6.gain(1, soundfontGain);
         
         // Sum mixer gains (4 inputs now: strings, drone, string pads, soundfont)
         sumL.gain(0, 1.0f); // strings

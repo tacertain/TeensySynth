@@ -55,6 +55,9 @@ public:
     // Audio output
     AudioStream* getOutput();
 
+    // Borrowed access to the loaded instrument data (caller must not delete; valid until next load/unload)
+    AudioSynthWavetable::instrument_data* getInstrumentData() const { return instrumentData; }
+
 private:
     static const int VOICES_PER_INSTRUMENT = 4;
     

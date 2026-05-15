@@ -103,6 +103,38 @@ void CC_SoundfontCrossfadeDuration(MIDIController* controller, byte channel, byt
     Serial.printf("Soundfont Crossfade Duration: %.1f ms (CC %d = %d)\n", durationMs, control, value);
 }
 
+void CC_SoundfontVolume(MIDIController* controller, byte channel, byte control, byte value) {
+    // Linear, step = 4/128. value=0 -> 0.0, value=32 -> 1.0 (unity), value=127 -> ~3.97.
+    // Affects both regular soundfont and Whitesnake pad outputs (shared mixerL6/R6 gain).
+    float gain = (float)value * (4.0f / 128.0f);
+    controller->getSynth().setSoundfontVolume(gain);
+    Serial.printf("Soundfont Volume: %.3f (CC %d = %d)\n", gain, control, value);
+}
+
+void CC_WhitesnakePadAttack(MIDIController* controller, byte channel, byte control, byte value) {
+    float attackMs = 0.5f * pow(4000.0f, (float)value / 127.0f);
+    controller->getSynth().getWhitesnakePad().setAttack(attackMs);
+    Serial.printf("Whitesnake Pad Attack: %.1f ms (CC %d = %d)\n", attackMs, control, value);
+}
+
+void CC_WhitesnakePadDecay(MIDIController* controller, byte channel, byte control, byte value) {
+    float decayMs = 0.5f * pow(4000.0f, (float)value / 127.0f);
+    controller->getSynth().getWhitesnakePad().setDecay(decayMs);
+    Serial.printf("Whitesnake Pad Decay: %.1f ms (CC %d = %d)\n", decayMs, control, value);
+}
+
+void CC_WhitesnakePadSustain(MIDIController* controller, byte channel, byte control, byte value) {
+    float sustainLevel = (float)value / 127.0f;
+    controller->getSynth().getWhitesnakePad().setSustain(sustainLevel);
+    Serial.printf("Whitesnake Pad Sustain: %.2f (CC %d = %d)\n", sustainLevel, control, value);
+}
+
+void CC_WhitesnakePadRelease(MIDIController* controller, byte channel, byte control, byte value) {
+    float releaseMs = 5.0f * pow(1000.0f, (float)value / 127.0f);
+    controller->getSynth().getWhitesnakePad().setRelease(releaseMs);
+    Serial.printf("Whitesnake Pad Release: %.1f ms (CC %d = %d)\n", releaseMs, control, value);
+}
+
 void CC_StringPadVolume(MIDIController* controller, byte channel, byte control, byte value) {
     controller->getSynth().setStringPadVolume((float)value / 127.0f);
     Serial.printf("String pad volume: %.2f\n", (float)value / 127.0f);
@@ -261,37 +293,15 @@ void CC_ModeSoundfontTromboneTusk(MIDIController* controller, byte channel, byte
     }
 }
 
-void CC_ModeSoundfontTrumpetTusk(MIDIController* controller, byte channel, byte control, byte value) {
+void CC_ModeWhitesnake(MIDIController* controller, byte channel, byte control, byte value) {
     if (value == 127) {
         Serial.print("CC ");
         Serial.print(control);
-        Serial.println(" triggered - Switching to Soundfont mode");
-        controller->getSynth().setSynthMode(HybridSynthesizer::SOUNDFONT);
-        installBank2ForMode(controller, true);
-        
-        Serial.println("Unloading all instruments...");
-        for (int i = 0; i < 4; i++) {
-            controller->getSynth().getSoundfont().unloadInstrument(i);
-        }
-        
-        // Reset ADSR to defaults
-        controller->getSynth().getSoundfont().setAttack(5.0f);
-        controller->getSynth().getSoundfont().setDecay(200.0f);
-        controller->getSynth().getSoundfont().setSustain(0.4f);
-        controller->getSynth().getSoundfont().setRelease(300.0f);
-        
-        Serial.println("Mode switched to SOUNDFONT, loading trumpet_tusk.sf2...");
-        bool success = controller->getSynth().getSoundfont().loadInstrument(0, "trumpet_tusk.sf2", 0);
-        if (success) {
-            Serial.print("Mode: SOUNDFONT + trumpet_tusk.sf2 (CC ");
-            Serial.print(control);
-            Serial.println(") - SUCCESS");
-        } else {
-            Serial.print("Mode: SOUNDFONT + trumpet_tusk.sf2 (CC ");
-            Serial.print(control);
-            Serial.println(") - FAILED");
-        }
-        controller->getSynth().setDefaultInstrument(0);
+        Serial.println(" triggered - Switching to WHITESNAKE mode");
+        controller->getSynth().setSynthMode(HybridSynthesizer::WHITESNAKE);
+        installBank2ForWhitesnakePad(controller);
+        controller->getSynth().setSoundfontVolume(3.0f);
+        controller->getSynth().loadWhitesnakeInstruments();
     }
 }
 
@@ -381,8 +391,19 @@ const MIDIControllerChannelCallback channel1Bank_21_30_SF[] = {
     { 25, CC_SoundfontFilterFrequency },
     { 26, CC_SoundfontFilterResonance },
     { 27, CC_SoundfontCrossfadeDuration },
+    { 28, CC_SoundfontVolume },
 };
 const size_t channel1Bank_21_30_SF_count = sizeof(channel1Bank_21_30_SF) / sizeof(channel1Bank_21_30_SF[0]);
+
+// Bank 2 (alternate): CC 20-29 - Whitesnake pad ADSR (only 21-24; pad has no filter/crossfade)
+const MIDIControllerChannelCallback channel1Bank_21_30_PAD[] = {
+    { 21, CC_WhitesnakePadAttack },
+    { 22, CC_WhitesnakePadDecay },
+    { 23, CC_WhitesnakePadSustain },
+    { 24, CC_WhitesnakePadRelease },
+    { 28, CC_SoundfontVolume },
+};
+const size_t channel1Bank_21_30_PAD_count = sizeof(channel1Bank_21_30_PAD) / sizeof(channel1Bank_21_30_PAD[0]);
 
 // Bank 3: CC 30-39 - (currently unused)
 const MIDIControllerChannelCallback channel1Bank_31_40[] = {
@@ -407,7 +428,7 @@ const MIDIControllerChannelCallback channel1Bank_51_60[] = {
     { 54, CC_ModeSoundfontTrombone },
     { 55, CC_ModeTusk },
     { 56, CC_ModeSoundfontTromboneTusk },
-    { 57, CC_ModeSoundfontTrumpetTusk },
+    { 57, CC_ModeWhitesnake },
     { 58, CC_ModeTuskChord },
     { 59, CC_CycleStringPadChordMode },
 };
@@ -423,4 +444,8 @@ void installBank2ForMode(MIDIController* controller, bool isSoundfontMode) {
     } else {
         controller->installCallbacks(2, channel1Bank_21_30, channel1Bank_21_30_count);
     }
+}
+
+void installBank2ForWhitesnakePad(MIDIController* controller) {
+    controller->installCallbacks(2, channel1Bank_21_30_PAD, channel1Bank_21_30_PAD_count);
 }
