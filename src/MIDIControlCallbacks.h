@@ -41,6 +41,7 @@ void CC_WhitesnakePadAttack(MIDIController* controller, byte channel, byte contr
 void CC_WhitesnakePadDecay(MIDIController* controller, byte channel, byte control, byte value);
 void CC_WhitesnakePadSustain(MIDIController* controller, byte channel, byte control, byte value);
 void CC_WhitesnakePadRelease(MIDIController* controller, byte channel, byte control, byte value);
+void CC_WhitesnakeOctaveMix(MIDIController* controller, byte channel, byte control, byte value);
 
 // String pad controls
 void CC_StringPadVolume(MIDIController* controller, byte channel, byte control, byte value);

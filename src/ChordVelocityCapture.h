@@ -12,8 +12,8 @@
  * Flow:
  *  - First noteOn opens a WINDOW_MS capture window; that note plus any
  *    others arriving inside the window are buffered (not fired).
- *  - When the window closes, the buffered notes all fire at the mean of
- *    their velocities. The mean is "pinned".
+ *  - When the window closes, the buffered notes all fire at the median of
+ *    their velocities. The median is "pinned".
  *  - While at least one note remains held, subsequent noteOns fire
  *    immediately at the pinned velocity.
  *  - When the last held note is released (via noteOff), state resets so

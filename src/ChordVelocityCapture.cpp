@@ -51,9 +51,24 @@ int ChordVelocityCapture::tick(uint32_t nowMs, PendingNote* out, int maxOut) {
         return 0;
     }
 
-    uint32_t sum = 0;
-    for (int i = 0; i < bufferCount; ++i) sum += buffer[i].velocity;
-    pinnedVelocity = (byte)(sum / bufferCount);
+    // Median velocity — rejects a stray outlier strike better than the mean.
+    byte sorted[MAX_BUFFER];
+    for (int i = 0; i < bufferCount; ++i) sorted[i] = buffer[i].velocity;
+    for (int i = 1; i < bufferCount; ++i) {
+        byte key = sorted[i];
+        int j = i - 1;
+        while (j >= 0 && sorted[j] > key) {
+            sorted[j + 1] = sorted[j];
+            j--;
+        }
+        sorted[j + 1] = key;
+    }
+    if (bufferCount % 2 == 1) {
+        pinnedVelocity = sorted[bufferCount / 2];
+    } else {
+        pinnedVelocity = (byte)(((uint16_t)sorted[bufferCount / 2 - 1]
+                                + sorted[bufferCount / 2]) / 2);
+    }
 
     int n = bufferCount < maxOut ? bufferCount : maxOut;
     for (int i = 0; i < n; ++i) {

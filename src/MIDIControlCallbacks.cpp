@@ -129,6 +129,12 @@ void CC_WhitesnakePadSustain(MIDIController* controller, byte channel, byte cont
     Serial.printf("Whitesnake Pad Sustain: %.2f (CC %d = %d)\n", sustainLevel, control, value);
 }
 
+void CC_WhitesnakeOctaveMix(MIDIController* controller, byte channel, byte control, byte value) {
+    float mix = (float)value / 127.0f;
+    controller->getSynth().getWhitesnakePad().setOctaveMix(mix);
+    Serial.printf("Whitesnake Octave Mix: %.3f (CC %d = %d)\n", mix, control, value);
+}
+
 void CC_WhitesnakePadRelease(MIDIController* controller, byte channel, byte control, byte value) {
     float releaseMs = 5.0f * pow(1000.0f, (float)value / 127.0f);
     controller->getSynth().getWhitesnakePad().setRelease(releaseMs);
@@ -301,6 +307,7 @@ void CC_ModeWhitesnake(MIDIController* controller, byte channel, byte control, b
         controller->getSynth().setSynthMode(HybridSynthesizer::WHITESNAKE);
         installBank2ForWhitesnakePad(controller);
         controller->getSynth().setSoundfontVolume(3.0f);
+        controller->getSynth().getWhitesnakePad().setOctaveMix(1.0f / 3.0f);
         controller->getSynth().loadWhitesnakeInstruments();
     }
 }
@@ -395,12 +402,13 @@ const MIDIControllerChannelCallback channel1Bank_21_30_SF[] = {
 };
 const size_t channel1Bank_21_30_SF_count = sizeof(channel1Bank_21_30_SF) / sizeof(channel1Bank_21_30_SF[0]);
 
-// Bank 2 (alternate): CC 20-29 - Whitesnake pad ADSR (only 21-24; pad has no filter/crossfade)
+// Bank 2 (alternate): CC 20-29 - Whitesnake pad ADSR (21-24), octave mix (25), volume (28)
 const MIDIControllerChannelCallback channel1Bank_21_30_PAD[] = {
     { 21, CC_WhitesnakePadAttack },
     { 22, CC_WhitesnakePadDecay },
     { 23, CC_WhitesnakePadSustain },
     { 24, CC_WhitesnakePadRelease },
+    { 25, CC_WhitesnakeOctaveMix },
     { 28, CC_SoundfontVolume },
 };
 const size_t channel1Bank_21_30_PAD_count = sizeof(channel1Bank_21_30_PAD) / sizeof(channel1Bank_21_30_PAD[0]);

@@ -4,6 +4,7 @@
 SoundfontPadSynthesizer::SoundfontPadSynthesizer()
     : instrumentData(nullptr)
     , volume(1.0f)
+    , octaveMix(1.0f / 3.0f)
     , attackMs(5.0f)
     , decayMs(0.0f)
     , sustainLevel(1.0f)
@@ -13,14 +14,18 @@ SoundfontPadSynthesizer::SoundfontPadSynthesizer()
         voiceStates[i].active = false;
         voiceStates[i].midiNote = -1;
         voiceStates[i].noteOnTime = 0;
-        voiceToEnvelope[i] = nullptr;
+        mainToVoiceMixer[i] = nullptr;
+        subToVoiceMixer[i] = nullptr;
+        voiceMixerToEnvelope[i] = nullptr;
         envelopeToMixer[i] = nullptr;
     }
     mixerAToFinal = nullptr;
     mixerBToFinal = nullptr;
 
     for (int i = 0; i < NUM_VOICES; ++i) {
-        voiceToEnvelope[i] = new AudioConnection(voices[i], 0, envelopes[i], 0);
+        mainToVoiceMixer[i]     = new AudioConnection(mainVoices[i], 0, voiceMixers[i], 0);
+        subToVoiceMixer[i]      = new AudioConnection(subVoices[i],  0, voiceMixers[i], 1);
+        voiceMixerToEnvelope[i] = new AudioConnection(voiceMixers[i], 0, envelopes[i], 0);
 
         AudioMixer4& targetMixer = (i < 4) ? mixerA : mixerB;
         int targetSlot = i % 4;
@@ -36,11 +41,14 @@ SoundfontPadSynthesizer::SoundfontPadSynthesizer()
     mixerBToFinal = new AudioConnection(mixerB, 0, finalMixer, 1);
 
     updateMixerGains();
+    updateVoiceMixerGains();
 }
 
 SoundfontPadSynthesizer::~SoundfontPadSynthesizer() {
     for (int i = 0; i < NUM_VOICES; ++i) {
-        delete voiceToEnvelope[i];
+        delete mainToVoiceMixer[i];
+        delete subToVoiceMixer[i];
+        delete voiceMixerToEnvelope[i];
         delete envelopeToMixer[i];
     }
     delete mixerAToFinal;
@@ -66,15 +74,26 @@ void SoundfontPadSynthesizer::noteOn(int midiNote, float velocity) {
     int voiceIndex = findAvailableVoice();
     if (voiceIndex == -1) {
         voiceIndex = findOldestVoice();
-        voices[voiceIndex].stop();
     }
 
-    voices[voiceIndex].setInstrument(*instrumentData);
+    // Always stop both wavetables before re-arming. A stale sub from a
+    // previous noteOn that never got an explicit stop would otherwise keep
+    // sounding (muted only by the envelope) and bleed through if the
+    // envelope re-opens with this voice.
+    stopVoiceWavetables(voiceIndex);
 
-    // Linear remap: 0.2 -> 12.7, 1.0 -> 127. Pulls the soft end of the
-    // MIDIController piecewise curve further down for more dynamic range.
-    int vel = constrain(12.7f + (velocity - 0.2f) * 142.875f, 0, 127);
-    voices[voiceIndex].playNote(midiNote, vel);
+    mainVoices[voiceIndex].setInstrument(*instrumentData);
+    subVoices[voiceIndex].setInstrument(*instrumentData);
+
+    // Quadratic curve through (0.2 -> 12.7) and (1.0 -> 127):
+    //   amp = 119.0625*v^2 + 7.9375
+    // Same endpoints as the prior linear map; the squared shape steepens the
+    // bottom of the range so soft strikes are noticeably quieter than mediums.
+    int vel = constrain(119.0625f * velocity * velocity + 7.9375f, 0, 127);
+    mainVoices[voiceIndex].playNote(midiNote, vel);
+    if (midiNote >= 12) {
+        subVoices[voiceIndex].playNote(midiNote - 12, vel);
+    }
     envelopes[voiceIndex].noteOn();
 
     voiceStates[voiceIndex].active = true;
@@ -93,10 +112,29 @@ void SoundfontPadSynthesizer::noteOff(int midiNote) {
 
 void SoundfontPadSynthesizer::allNotesOff() {
     for (int i = 0; i < NUM_VOICES; ++i) {
-        voices[i].stop();
+        stopVoiceWavetables(i);
         envelopes[i].noteOff();
         voiceStates[i].active = false;
         voiceStates[i].midiNote = -1;
+    }
+}
+
+void SoundfontPadSynthesizer::stopVoiceWavetables(int voiceIndex) {
+    mainVoices[voiceIndex].stop();
+    subVoices[voiceIndex].stop();
+}
+
+void SoundfontPadSynthesizer::setOctaveMix(float mix) {
+    octaveMix = constrain(mix, 0.0f, 1.0f);
+    updateVoiceMixerGains();
+}
+
+void SoundfontPadSynthesizer::updateVoiceMixerGains() {
+    for (int i = 0; i < NUM_VOICES; ++i) {
+        voiceMixers[i].gain(0, 1.0f);       // main, always unity
+        voiceMixers[i].gain(1, octaveMix);  // sub
+        voiceMixers[i].gain(2, 0.0f);
+        voiceMixers[i].gain(3, 0.0f);
     }
 }
 

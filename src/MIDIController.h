@@ -59,7 +59,13 @@ private:
     const MIDIControllerChannelCallback* callbackTables[MAX_BANKS];
     size_t callbackCounts[MAX_BANKS];
 
-    // Velocity-unification for chords. Active only in WHITESNAKE mode.
+    // Velocity-unification for chords. Active only in WHITESNAKE mode — the
+    // toggle is a runtime check on synth.getCurrentMode() inside the three
+    // call sites (handleNoteOn, handleNoteOff, update), not a separate enable
+    // flag. Whenever any of those sees a non-WHITESNAKE mode it calls
+    // chordCapture.reset() so the next entry into WHITESNAKE starts from a
+    // clean IDLE state rather than picking up whatever HOLDING/CAPTURING
+    // state was active when the mode last switched away.
     ChordVelocityCapture chordCapture;
 
     // Helper functions for MIDI processing

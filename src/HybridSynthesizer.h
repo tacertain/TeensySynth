@@ -660,29 +660,17 @@ public:
         peakMonitorR.reset();
         whitesnakePadPeakMonitor.reset();
         soundfont.resetPeakMonitors();
+        AudioProcessorUsageMaxReset();
+        AudioMemoryUsageMaxReset();
     }
 
     void printPeakLevels() {
-        Serial.print("Peak Levels - L: min=");
-        Serial.print(peakMonitorL.getMin());
-        Serial.print(", max=");
-        Serial.print(peakMonitorL.getMax());
-        Serial.print(" | R: min=");
-        Serial.print(peakMonitorR.getMin());
-        Serial.print(", max=");
-        Serial.print(peakMonitorR.getMax());
-        Serial.print(" | Audio Memory: ");
-        Serial.print(AudioMemoryUsage());
-        Serial.print("/");
-        Serial.println(AudioMemoryUsageMax());
-
-        Serial.print("  WhitesnakePad: min=");
-        Serial.print(whitesnakePadPeakMonitor.getMin());
-        Serial.print(", max=");
-        Serial.println(whitesnakePadPeakMonitor.getMax());
-
-        // Print soundfont synthesizer peak levels
-        soundfont.printPeakLevels();
+        Serial.printf("Peak Levels - L: min=%d, max=%d | R: min=%d, max=%d\n",
+                      peakMonitorL.getMin(), peakMonitorL.getMax(),
+                      peakMonitorR.getMin(), peakMonitorR.getMax());
+        Serial.printf("Audio Memory (peak): %u | CPU (peak): %.1f%%\n",
+                      (unsigned)AudioMemoryUsageMax(),
+                      AudioProcessorUsageMax());
     }
 
 private:
