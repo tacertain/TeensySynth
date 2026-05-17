@@ -265,37 +265,14 @@ void CC_ModeTusk(MIDIController* controller, byte channel, byte control, byte va
     }
 }
 
-void CC_ModeSoundfontTromboneTusk(MIDIController* controller, byte channel, byte control, byte value) {
+void CC_ModeIran(MIDIController* controller, byte channel, byte control, byte value) {
     if (value == 127) {
-        Serial.print("CC ");
+        controller->getSynth().setSynthMode(HybridSynthesizer::IRAN);
+        installBank2ForMode(controller, false);
+        controller->getSynth().setSplitPoint(60);
+        Serial.print("Mode: IRAN (CC ");
         Serial.print(control);
-        Serial.println(" triggered - Switching to Soundfont mode");
-        controller->getSynth().setSynthMode(HybridSynthesizer::SOUNDFONT);
-        installBank2ForMode(controller, true);
-        
-        Serial.println("Unloading all instruments...");
-        for (int i = 0; i < 4; i++) {
-            controller->getSynth().getSoundfont().unloadInstrument(i);
-        }
-        
-        // Reset ADSR to defaults
-        controller->getSynth().getSoundfont().setAttack(5.0f);
-        controller->getSynth().getSoundfont().setDecay(200.0f);
-        controller->getSynth().getSoundfont().setSustain(0.4f);
-        controller->getSynth().getSoundfont().setRelease(300.0f);
-        
-        Serial.println("Mode switched to SOUNDFONT, loading trombone_tusk.sf2...");
-        bool success = controller->getSynth().getSoundfont().loadInstrument(1, "trombone_tusk.sf2", 0);
-        if (success) {
-            Serial.print("Mode: SOUNDFONT + trombone_tusk.sf2 (CC ");
-            Serial.print(control);
-            Serial.println(") - SUCCESS");
-        } else {
-            Serial.print("Mode: SOUNDFONT + trombone_tusk.sf2 (CC ");
-            Serial.print(control);
-            Serial.println(") - FAILED");
-        }
-        controller->getSynth().setDefaultInstrument(1);
+        Serial.println(")");
     }
 }
 
@@ -435,7 +412,7 @@ const MIDIControllerChannelCallback channel1Bank_51_60[] = {
     { 53, CC_ModeStringPadsBright },
     { 54, CC_ModeSoundfontTrombone },
     { 55, CC_ModeTusk },
-    { 56, CC_ModeSoundfontTromboneTusk },
+    { 56, CC_ModeIran },
     { 57, CC_ModeWhitesnake },
     { 58, CC_ModeTuskChord },
     { 59, CC_CycleStringPadChordMode },

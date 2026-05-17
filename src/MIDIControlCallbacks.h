@@ -56,7 +56,7 @@ void CC_ModeDrone(MIDIController* controller, byte channel, byte control, byte v
 void CC_ModeStringPadsBright(MIDIController* controller, byte channel, byte control, byte value);
 void CC_ModeSoundfontTrombone(MIDIController* controller, byte channel, byte control, byte value);
 void CC_ModeTusk(MIDIController* controller, byte channel, byte control, byte value);
-void CC_ModeSoundfontTromboneTusk(MIDIController* controller, byte channel, byte control, byte value);
+void CC_ModeIran(MIDIController* controller, byte channel, byte control, byte value);
 void CC_ModeWhitesnake(MIDIController* controller, byte channel, byte control, byte value);
 void CC_ModeTuskChord(MIDIController* controller, byte channel, byte control, byte value);
 void CC_CycleStringPadChordMode(MIDIController* controller, byte channel, byte control, byte value);

@@ -51,7 +51,7 @@ int ChordVelocityCapture::tick(uint32_t nowMs, PendingNote* out, int maxOut) {
         return 0;
     }
 
-    // Median velocity — rejects a stray outlier strike better than the mean.
+    // Sort buffered velocities so we can read median and extremes.
     byte sorted[MAX_BUFFER];
     for (int i = 0; i < bufferCount; ++i) sorted[i] = buffer[i].velocity;
     for (int i = 1; i < bufferCount; ++i) {
@@ -63,7 +63,17 @@ int ChordVelocityCapture::tick(uint32_t nowMs, PendingNote* out, int maxOut) {
         }
         sorted[j + 1] = key;
     }
-    if (bufferCount % 2 == 1) {
+
+    byte minVel = sorted[0];
+    byte maxVel = sorted[bufferCount - 1];
+    bool hasLow = minVel < 30;
+    bool hasHigh = maxVel > 70;
+
+    if (hasLow && !hasHigh) {
+        pinnedVelocity = 30;
+    } else if (hasHigh && !hasLow) {
+        pinnedVelocity = 70;
+    } else if (bufferCount % 2 == 1) {
         pinnedVelocity = sorted[bufferCount / 2];
     } else {
         pinnedVelocity = (byte)(((uint16_t)sorted[bufferCount / 2 - 1]

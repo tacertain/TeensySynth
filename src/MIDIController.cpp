@@ -82,11 +82,7 @@ float MIDIController::midiNoteToFrequency(byte note) {
 }
 
 float MIDIController::midiVelocityToFloat(byte velocity) {
-    // Piecewise-linear curve: floor of 0.2 at MIDI vel<=20, ceiling of 1.0 at vel>=70,
-    // linear ramp between. Compensates for keyboards with a poor native curve.
-    if (velocity <= 20) return 0.2f;
-    if (velocity >= 70) return 1.0f;
-    return 0.2f + (float)(velocity - 20) * (0.8f / 50.0f);
+    return (float)velocity / 128.0f;
 }
 
 void MIDIController::handleNoteOn(byte channel, byte note, byte velocity) {

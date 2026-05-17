@@ -346,6 +346,10 @@ public:
 
     void loadWhitesnakeInstruments() {
         Serial.println("Loading Whitesnake VS Pad...");
+        // Drop the pad's borrowed pointer BEFORE reloading slot 0. loadInstrument
+        // deletes the previous instrument_data on success, so any pointer the pad
+        // is still holding would dangle and crash on the next noteOn.
+        whitesnakePad.setInstrumentData(nullptr);
         // Load via SoundfontSynthesizer slot 0 — same path that already works.
         // Reusing slot 0's reader frees its prior samples (FreePrevSampleData) so the
         // global SF22ASWT::samples_usedRam budget gets recycled properly.
@@ -355,7 +359,6 @@ public:
             whitesnakePad.setInstrumentData(soundfont.getInstrumentData(0));
         } else {
             Serial.println("Failed to load whitesnake.sf2 via SoundfontSynthesizer");
-            whitesnakePad.setInstrumentData(nullptr);
         }
 
         // Pad envelope on top of the sample's natural envelope

@@ -85,11 +85,19 @@ void SoundfontPadSynthesizer::noteOn(int midiNote, float velocity) {
     mainVoices[voiceIndex].setInstrument(*instrumentData);
     subVoices[voiceIndex].setInstrument(*instrumentData);
 
-    // Quadratic curve through (0.2 -> 12.7) and (1.0 -> 127):
-    //   amp = 119.0625*v^2 + 7.9375
-    // Same endpoints as the prior linear map; the squared shape steepens the
-    // bottom of the range so soft strikes are noticeably quieter than mediums.
-    int vel = constrain(119.0625f * velocity * velocity + 7.9375f, 0, 127);
+    // Square-law velocity-to-amplitude curve, aligned with midiVelocityToFloat (v/128):
+    //   MIDI byte <= 30 -> amp = (0.25)^2 = 0.0625
+    //   MIDI byte >= 70 -> amp = 1.0
+    //   between         -> amp = (0.25 + 0.75*t)^2  where t = (v - 30/128) / (40/128)
+    // A quadratic in v with positive second derivative; equivalent to a linear
+    // ramp 0.25 -> 1.0 in the input, then squared.
+    constexpr float V_LOW  = 30.0f / 128.0f;
+    constexpr float V_HIGH = 70.0f / 128.0f;
+    float v = constrain(velocity, V_LOW, V_HIGH);
+    float t = (v - V_LOW) / (V_HIGH - V_LOW);
+    float linear = 0.25f + 0.75f * t;
+    float amp = linear * linear;
+    int vel = constrain((int)(127.0f * amp), 0, 127);
     mainVoices[voiceIndex].playNote(midiNote, vel);
     if (midiNote >= 12) {
         subVoices[voiceIndex].playNote(midiNote - 12, vel);

@@ -26,7 +26,7 @@ void setup()
 {
     //while (!Serial);
     midiController.begin();
-    AudioMemory(20); // Memory for audio processing
+    AudioMemory(32); // Memory for audio processing
 
     Serial.println("Hello, world!");
     AudioControlSGTL5000 audioShield;

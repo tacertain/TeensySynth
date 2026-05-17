@@ -36,19 +36,48 @@ The synthesizer has multiple synthesis modes:
 - **Above Middle C+12**: String pad synthesizer (lead/melody sounds)
 - **Perfect for solo performance** with bass accompaniment and lead melodies
 
-### 6. **TUSK** Mode ✅ **NEW**
+### 6. **IRAN** Mode
+- **Split mode** targeting "I Ran" by Flock of Seagulls
+- **Split point**: Middle C (MIDI note 60)
+- **Below Middle C**: Drone synthesizer at fixed full velocity
+- **Above Middle C**: String pads transposed up two octaves at fixed full velocity
+  - **F-A (notes 53-57)**: Auto-expanded to major chords
+  - **Middle C (note 60)**: Auto-expanded to root + octave
+  - **All other keys**: Single notes
+
+### 7. **TUSK** Mode
 - **Soundfont split mode** using two loaded instruments
 - **Split point**: Middle C (MIDI note 60)
 - **Below Middle C**: Soundfont instrument 1 (typically bass/low sounds)
 - **Above Middle C**: Soundfont instrument 0 (typically lead/high sounds)
 - **Perfect for expressive performance** with different timbres across the keyboard
 
-### 7. **WHITESNAKE** Mode
+### 8. **TUSK_CHORD** Mode
+- **TUSK split with automatic chord expansion** above the split point
+- **Split point**: Middle C (MIDI note 60)
+- **Below Middle C**: Soundfont instrument 1, single note at max velocity
+- **Above Middle C**: Soundfont instrument 0, with the played note expanded to a 5-note voicing at max velocity
+- **Chord-mapped root notes** (others play as single notes):
+  - **A** → A, D, F, A-2oct, D-2oct
+  - **G** → G, C, E, G-2oct, C-2oct
+  - **F** → F, A, D, F-2oct, A-2oct
+  - **B** → G, B, D, G-2oct, B-2oct
+  - **C#** → A, C#, E, A-2oct, C#-2oct
+- Targets the "Tusk" trumpet voicing — one finger triggers the recorded chord stab
+
+### 9. **WHITESNAKE** Mode
 - **Prophet VS pad** mode targeting the keys sound from "Here I Go Again" (1987)
 - Loads `whitesnake.sf2` via a dedicated lean pad synth (`SoundfontPadSynthesizer`) — no per-voice filter or crossfade
 - **8-voice polyphony** to absorb note overlap during the long 800 ms release
+- Each voice plays both the pressed note and a sub-octave layer mixed by CC 25
 - Standard polyphonic playback across the full keyboard — no split point
-- CC 21-24 control the pad ADSR live (see Soundfont Synthesizer Controls). CC 25-27 are inert in WHITESNAKE since the pad has no filter or crossfade.
+- **Chord-velocity capture**: notes arriving within 30 ms of each other are buffered and fired together at one shared velocity. Compensates for keyboards that strike chord notes at uneven velocities. The shared velocity is:
+  - **30** if any note in the chord is below 30 (and none above 70)
+  - **70** if any note is above 70 (and none below 30)
+  - the **median** otherwise (including when the chord spans both extremes)
+
+  While any captured note is still held, subsequent notes fire immediately at the pinned velocity.
+- CC 21-25 control pad parameters live (see Soundfont Synthesizer Controls). CC 26-27 are inert in WHITESNAKE since the pad has no filter or crossfade.
 
 ## Control Methods
 
@@ -61,13 +90,13 @@ Connect a MIDI controller or DAW for real-time parameter control:
 - **CC 53** (value 127): String Pads + **"Bright Strings"** preset
 - **CC 54** (value 127): Switch to Soundfont mode and load `trombone.sf2` (experimental SF slot)
 - **CC 55** (value 127): Switch to **TUSK mode** - Soundfont split mode with instrument 0 above split point, instrument 1 below
-- **CC 56** (value 127): Switch to Soundfont mode and load `trombone_tusk.sf2` into slot 1 (experimental SF slot)
+- **CC 56** (value 127): Switch to **IRAN mode** - drone below Middle C, string pads above (with chord modes on F-A and Middle C; see Channel 7 routing)
 - **CC 57** (value 127): Switch to **WHITESNAKE mode** - loads `whitesnake.sf2` (Prophet VS pad for "Here I Go Again")
 - **CC 58** (value 127): Switch to **TUSK_CHORD mode** - TUSK split with chord-mapping above the split point
 - **CC 59** (value 127): Cycle String Pad Chord Mode (see below)
 
 #### Volume Controls (Channel 1)
-- **CC 7**: Master Volume (0-127) - Controls overall output level
+- **CC 7**: Master Volume (0-127) — value/64 mapping, so **64 = unity** and 127 ≈ 2× boost (intentional headroom)
 - **CC 23**: Drone Volume (0-127) - Controls drone synthesizer level
 
 #### String Synthesizer Controls (Channel 1)
@@ -90,9 +119,11 @@ Connect a MIDI controller or DAW for real-time parameter control:
 - **CC 22**: Decay (0-127) — exponential, 0.5 ms – 2000 ms
 - **CC 23**: Sustain (0-127) — linear, 0.0 – 1.0
 - **CC 24**: Release (0-127) — exponential, 5 ms – 5000 ms
-- **CC 25**: Filter Cutoff (0-127) — exponential multiplier of note frequency, 0.5× – 20× *(SOUNDFONT/TUSK/TUSK_CHORD only)*
-- **CC 26**: Filter Resonance (0-127) — linear Q, 0.7 – 5.0 *(SOUNDFONT/TUSK/TUSK_CHORD only)*
-- **CC 27**: Crossfade Duration (0-127) — exponential, 10 ms – 5000 ms *(SOUNDFONT/TUSK/TUSK_CHORD only)*
+- **CC 25**: *SOUNDFONT/TUSK/TUSK_CHORD*: Filter Cutoff — exponential multiplier of note frequency, 0.5× – 20×
+  *WHITESNAKE*: Sub-Octave Mix (0-127) — linear, 0.0 (no sub) – 1.0 (sub at unity with main)
+- **CC 26**: Filter Resonance (0-127) — linear Q, 0.7 – 5.0 *(SOUNDFONT/TUSK/TUSK_CHORD only; inert in WHITESNAKE)*
+- **CC 27**: Crossfade Duration (0-127) — exponential, 10 ms – 5000 ms *(SOUNDFONT/TUSK/TUSK_CHORD only; inert in WHITESNAKE)*
+- **CC 28**: Soundfont/Pad Volume (0-127) — linear, value × (4/128). **32 = unity**, 127 ≈ 4× boost. Affects both the recorded-instrument soundfont and the Whitesnake pad (they share the downstream mixer gain).
 
 *Note: ADSR settings layer on top of the SF2's own envelope. The SF2's envelope shapes the wavetable output; the Teensy envelope shapes that further before the filter.*
 
@@ -118,7 +149,7 @@ Connect a MIDI controller or DAW for real-time parameter control:
 
 *Note: All string pad parameter changes affect all 6 active voices simultaneously for real-time performance control.*
 
-*Note: String pad presets are selected via mode switching (CC 53-57). You can manually adjust CC 41-44 after switching to a preset mode for fine-tuning.*
+*Note: String pad presets are selected by entering STRING_PADS mode (CC 53). You can manually adjust CC 41-44 after switching for fine-tuning.*
 
 #### Global Controls (Channel 1)
 - **Pitch Bend**: Pitch bend wheel affects all active voices
@@ -126,13 +157,28 @@ Connect a MIDI controller or DAW for real-time parameter control:
   - Works in all synthesis modes
 
 ## MIDI Note Input
-- **MIDI Channel 1**: All note input
+- **MIDI Channel 1**: Default note input; the current mode (set via CC 51-58) decides which engine plays.
+- **MIDI Channels 2-9**: Per-channel mode override — notes on these channels are routed to a specific engine regardless of the active mode. Useful for split keyboards, sequencers, or multi-zone controllers.
+  - **Ch 2**: PLUCKED_STRINGS
+  - **Ch 3**: DRONE
+  - **Ch 4**: STRING_PADS
+  - **Ch 5**: SOUNDFONT
+  - **Ch 6**: SPLIT
+  - **Ch 7**: IRAN
+  - **Ch 8**: TUSK
+  - **Ch 9**: WHITESNAKE
 - **Note Range**: Full 88-key piano range supported (A0-C8)
 - **Velocity Sensitive**: All synthesizers respond to note velocity
-- **Polyphonic Voice Limits**: 
+- **Polyphonic Voice Limits**:
   - **Plucked Strings**: Up to 8 simultaneous notes
-  - **Drone**: Up to 6 simultaneous notes  
+  - **Drone**: Up to 6 simultaneous notes
   - **String Pads**: Up to 6 simultaneous notes with intelligent voice allocation
+  - **Soundfont (SOUNDFONT, TUSK, TUSK_CHORD)**: 4 voices per loaded instrument slot. TUSK/TUSK_CHORD use two slots, giving 4 voices below the split and 4 above. TUSK_CHORD voicings consume one voice each, so a 5-note chord exhausts the upper slot.
+  - **Whitesnake Pad**: 8 voices. Voice stealing prefers releasing voices before active ones.
+
+### Velocity Response
+- **Input curve** (all modes): a plain linear normalization — float velocity = `MIDI byte / 128`. No clipping, no compensation.
+- **Whitesnake pad output curve**: a square-law amplitude curve, aligned with the `/128` input shaper. Raw MIDI velocity ≤ 30 floors at amp = (0.25)² = 0.0625; ≥ 70 ceilings at amp = 1.0; between, amp = (0.25 + 0.75·t)² where t = (v − 30/128) / (40/128). The squared ramp gives a perceptually natural response with a positive second derivative (concave up). The amp is then quantized to a 0-127 MIDI byte before being passed to the wavetable.
 
 ### String Pad Polyphonic Behavior
 - **Voice Allocation**: New notes automatically find available voices
@@ -239,7 +285,7 @@ The following features are planned for the next update:
 3. **Power**: Use quality USB power supply for stable operation
 
 ## Troubleshooting
-- If no sound: Check audio connections and master volume (CC 7)
-- If MIDI not responding: Ensure MIDI device is on Channel 1
-- If mode switching not working: Use MIDI CC controls (51/54/55)
+- If no sound: Check audio connections and master volume (CC 7, unity at value 64)
+- If MIDI not responding: Ensure MIDI device is on Channel 1 (or one of the per-channel override channels 2-9)
+- If mode switching not working: Use MIDI CC controls — 51 (Plucked), 52 (Drone), 53 (String Pads), 54 (Soundfont/trombone), 55 (TUSK), 56 (IRAN), 57 (WHITESNAKE), 58 (TUSK_CHORD)
 - For best results: Use MIDI controller with knobs/sliders for real-time control
