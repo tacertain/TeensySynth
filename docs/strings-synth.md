@@ -1,5 +1,15 @@
 # Classic 80s String Synthesizer - Design Document
 
+> **Status: historical design record.** This document captures the design
+> intent and phase-by-phase implementation log for the StringPad engine.
+> It does **not** reflect the current MIDI/CC layout — in particular, the
+> "CC 53–57 = string-pad preset" mapping in the "How to Use" section has
+> been superseded (CC 53 still loads the Bright Strings preset; CC 54–58
+> now switch to Soundfont/TUSK/IRAN/WHITESNAKE/TUSK_CHORD modes). See
+> `keyboard-controls.md` for the live control surface. The engine itself
+> still exists in `src/StringPadSynthesizer.{h,cpp}` and the preset
+> definitions are still present, just no longer bound to CC 54–57.
+
 ## Overview
 This document outlines the design for adding classic 80s string synthesizer sounds to the TeensySynth project. The goal is to recreate the lush, sweeping string pad sounds that were characteristic of 1980s music, particularly those produced by instruments like the Korg Delta, Roland Jupiter-6, and similar analog string synthesizers used in tracks like "I Ran" by Flock of Seagulls.
 

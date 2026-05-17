@@ -119,16 +119,26 @@ old per-sample `CENTS_OFFSET` tweaks dialed in by ear on the
 trumpet/trombone SF2s were compensating for this bug and now over-correct
 in the opposite direction — they need re-checking after the fix.
 
-### Velocity shaping lives in two layers, on purpose
-1. **Keyboard-correction layer** — `MIDIController::midiVelocityToFloat`,
-   piecewise: MIDI≤20 → 0.2, MIDI≥70 → 1.0, linear between. Compensates
-   for the Launchkey's poor native curve. Applies globally to all modes.
-2. **Musical-dynamics layer** — `SoundfontPadSynthesizer::noteOn` does a
-   quadratic remap `119.0625·v² + 7.9375` (endpoints 0.2→12.7, 1.0→127).
-   Pad-specific; gives soft strikes meaningfully quieter than mediums.
+### Velocity shaping is all in the pad
+`MIDIController::midiVelocityToFloat` is now a plain `v / 128` —
+no clipping, no compensation, identical across all modes. The whole
+velocity-to-amplitude curve for WHITESNAKE lives in
+`SoundfontPadSynthesizer::noteOn`:
 
-They look like duplication if you only see one of them. Don't collapse
-without touching both.
+- Inputs ≤ 30/128 floor to amp = (0.25)² = 0.0625
+- Inputs ≥ 70/128 ceiling to amp = 1.0
+- Between: `amp = (0.25 + 0.75·t)²` where `t = (v − 30/128) / (40/128)`
+  — a quadratic in v with positive second derivative (square of a
+  linear ramp 0.25 → 1.0).
+- The amp is then quantized to a 0–127 int and passed to
+  `AudioSynthWavetable::playNote(note, vel)`.
+
+Note that the pad's input clip points (V_LOW = 30/128, V_HIGH = 70/128)
+deliberately mirror the chord-velocity-capture clamp values (30 and 70).
+That makes the two stages partially redundant: `ChordVelocityCapture`'s
+"any vel < 30 → 30 / any vel > 70 → 70" rule produces bytes the pad
+would clip to the same boundary anyway. Audible output is identical;
+keep an eye on this if you ever change either threshold.
 
 ### Sustain pedal is not implemented
 CC 64 is unhandled anywhere in `MIDIController`. The word "sustain" in

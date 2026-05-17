@@ -1,5 +1,14 @@
 # Drone Synthesizer Mode - Design Document
 
+> **Status: historical design record.** Captures the design intent and
+> phase-by-phase implementation log for the Drone engine. The `SynthMode`
+> enum example below uses obsolete names (`STRINGS_ONLY`, `SOUNDFONT_ONLY`,
+> `LAYERED`); the current enum lives in `src/HybridSynthesizer.h` and
+> includes PLUCKED_STRINGS, DRONE, STRING_PADS, SOUNDFONT, SPLIT, IRAN,
+> TUSK, TUSK_CHORD, WHITESNAKE. See `keyboard-controls.md` for the
+> current control surface. The Drone engine itself remains in
+> `src/DroneSynthesizer.{h,cpp}` and is reached via mode DRONE.
+
 ## Overview
 This document outlines the design for a new synthesizer mode that recreates the classic 1980s analog drone sound as heard in "I Ran" by Flock of Seagulls, originally produced by a Korg MS-10 synthesizer. The drone mode will be integrated into the existing `HybridSynthesizer` architecture alongside the current STRINGS_ONLY, SOUNDFONT_ONLY, LAYERED, and SPLIT modes.
 

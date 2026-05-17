@@ -1,5 +1,12 @@
 # TeensySynth Audio Wiring Diagram
 
+> **Coverage gap:** this diagram and its discussion predate WHITESNAKE
+> mode. The WHITESNAKE pad (`SoundfontPadSynthesizer`) shares mixerL6/R6
+> **slot 1** with the recorded-instrument Soundfont engine (which uses
+> slot 0); the two modes are mutually exclusive at runtime, so they
+> never sum, but slot 1 is not depicted below. See
+> `whitesnake-audio-wiring.md` for the pad-specific signal path.
+
 This document describes the complete audio signal flow from synthesis sources through mixers to the final output, including all gain stages and potential overflow points.
 
 ## Overview
