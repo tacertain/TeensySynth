@@ -9,11 +9,14 @@ SoundfontPadSynthesizer::SoundfontPadSynthesizer()
     , decayMs(0.0f)
     , sustainLevel(1.0f)
     , releaseMs(800.0f)
+    , velocityFloor(0.25f)
+    , expression(1.0f)
 {
     for (int i = 0; i < NUM_VOICES; ++i) {
         voiceStates[i].active = false;
         voiceStates[i].midiNote = -1;
         voiceStates[i].noteOnTime = 0;
+        voiceBaseAmp[i] = 0.0f;
         mainToVoiceMixer[i] = nullptr;
         subToVoiceMixer[i] = nullptr;
         voiceMixerToEnvelope[i] = nullptr;
@@ -85,28 +88,24 @@ void SoundfontPadSynthesizer::noteOn(int midiNote, float velocity) {
     mainVoices[voiceIndex].setInstrument(*instrumentData);
     subVoices[voiceIndex].setInstrument(*instrumentData);
 
-    // Square-law velocity-to-amplitude curve, aligned with midiVelocityToFloat (v/128):
-    //   MIDI byte <= 30 -> amp = (0.25)^2 = 0.0625
-    //   MIDI byte >= 70 -> amp = 1.0
-    //   between         -> amp = (0.25 + 0.75*t)^2  where t = (v - 30/128) / (40/128)
-    // A quadratic in v with positive second derivative; equivalent to a linear
-    // ramp 0.25 -> 1.0 in the input, then squared.
-    constexpr float V_LOW  = 30.0f / 128.0f;
-    constexpr float V_HIGH = 70.0f / 128.0f;
-    float v = constrain(velocity, V_LOW, V_HIGH);
-    float t = (v - V_LOW) / (V_HIGH - V_LOW);
-    float linear = 0.25f + 0.75f * t;
-    float amp = linear * linear;
-    int vel = constrain((int)(127.0f * amp), 0, 127);
-    mainVoices[voiceIndex].playNote(midiNote, vel);
+    float amp = velocityToAmp(velocity);
+    voiceBaseAmp[voiceIndex] = amp;
+    Serial.printf("Pad noteOn: midiNote=%d, inVel=%.3f, amp=%.4f\n",
+                  midiNote, velocity, amp);
+
+    // Always play at full wavetable amplitude; dynamics live in the voice
+    // mixer (full float precision, and adjustable while the note sounds).
+    mainVoices[voiceIndex].playNote(midiNote, 127);
     if (midiNote >= 12) {
-        subVoices[voiceIndex].playNote(midiNote - 12, vel);
+        subVoices[voiceIndex].playNote(midiNote - 12, 127);
     }
     envelopes[voiceIndex].noteOn();
 
     voiceStates[voiceIndex].active = true;
     voiceStates[voiceIndex].midiNote = midiNote;
     voiceStates[voiceIndex].noteOnTime = millis();
+
+    updateVoiceMixerGains();
 }
 
 void SoundfontPadSynthesizer::noteOff(int midiNote) {
@@ -139,11 +138,42 @@ void SoundfontPadSynthesizer::setOctaveMix(float mix) {
 
 void SoundfontPadSynthesizer::updateVoiceMixerGains() {
     for (int i = 0; i < NUM_VOICES; ++i) {
-        voiceMixers[i].gain(0, 1.0f);       // main, always unity
-        voiceMixers[i].gain(1, octaveMix);  // sub
+        float mainGain = voiceBaseAmp[i] * expression;
+        voiceMixers[i].gain(0, mainGain);             // main
+        voiceMixers[i].gain(1, mainGain * octaveMix); // sub
         voiceMixers[i].gain(2, 0.0f);
         voiceMixers[i].gain(3, 0.0f);
     }
+}
+
+void SoundfontPadSynthesizer::setExpression(float e) {
+    expression = constrain(e, 0.0f, 1.0f);
+    updateVoiceMixerGains();
+}
+
+// Square-law velocity-to-amplitude curve, aligned with midiVelocityToFloat (v/128):
+//   MIDI byte <= 20  -> amp = velocityFloor^2
+//   MIDI byte >= 100 -> amp = 1.0
+//   between          -> amp = (velocityFloor + (1-velocityFloor)*t)^2
+//                       where t = (v - 20/128) / (80/128)
+// velocityFloor controls the dB range: 0.25 -> 24 dB (default), 0.5 -> 12 dB, 1.0 -> flat.
+float SoundfontPadSynthesizer::velocityToAmp(float velocity) const {
+    constexpr float V_LOW  = 20.0f / 128.0f;
+    constexpr float V_HIGH = 100.0f / 128.0f;
+    float v = constrain(velocity, V_LOW, V_HIGH);
+    float t = (v - V_LOW) / (V_HIGH - V_LOW);
+    float linear = velocityFloor + (1.0f - velocityFloor) * t;
+    return linear * linear;
+}
+
+void SoundfontPadSynthesizer::setHeldLevel(float velocity) {
+    float amp = velocityToAmp(velocity);
+    for (int i = 0; i < NUM_VOICES; ++i) {
+        if (voiceStates[i].active) {
+            voiceBaseAmp[i] = amp;
+        }
+    }
+    updateVoiceMixerGains();
 }
 
 int SoundfontPadSynthesizer::getActiveVoiceCount() const {
@@ -198,6 +228,10 @@ void SoundfontPadSynthesizer::setADSR(float attack, float decay, float sustain, 
     setDecay(decay);
     setSustain(sustain);
     setRelease(release);
+}
+
+void SoundfontPadSynthesizer::setVelocityFloor(float floor) {
+    velocityFloor = constrain(floor, 0.0f, 1.0f);
 }
 
 int SoundfontPadSynthesizer::findAvailableVoice() {

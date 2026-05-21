@@ -141,6 +141,22 @@ void CC_WhitesnakePadRelease(MIDIController* controller, byte channel, byte cont
     Serial.printf("Whitesnake Pad Release: %.1f ms (CC %d = %d)\n", releaseMs, control, value);
 }
 
+void CC_WhitesnakePadVelocitySmoothing(MIDIController* controller, byte channel, byte control, byte value) {
+    // Map 0-127 to 500ms - 15000ms (exponential): tau = 500 * 30^(v/127).
+    float tauMs = 500.0f * pow(30.0f, (float)value / 127.0f);
+    controller->getVelocitySmoother().setTauMs(tauMs);
+    Serial.printf("Whitesnake Velocity Smoothing tau: %.0f ms (CC %d = %d)\n", tauMs, control, value);
+}
+
+void CC_WhitesnakePadVelocityFloor(MIDIController* controller, byte channel, byte control, byte value) {
+    // Linear 0..127 -> 0..1.0. This is the pre-square floor of the velocity curve;
+    // amp floor is its square. Default ~32 -> 0.25 -> 24 dB range.
+    float floor = (float)value / 127.0f;
+    controller->getSynth().getWhitesnakePad().setVelocityFloor(floor);
+    Serial.printf("Whitesnake Velocity Floor: %.3f (amp floor %.4f) (CC %d = %d)\n",
+                  floor, floor * floor, control, value);
+}
+
 void CC_StringPadVolume(MIDIController* controller, byte channel, byte control, byte value) {
     controller->getSynth().setStringPadVolume((float)value / 127.0f);
     Serial.printf("String pad volume: %.2f\n", (float)value / 127.0f);
@@ -379,13 +395,16 @@ const MIDIControllerChannelCallback channel1Bank_21_30_SF[] = {
 };
 const size_t channel1Bank_21_30_SF_count = sizeof(channel1Bank_21_30_SF) / sizeof(channel1Bank_21_30_SF[0]);
 
-// Bank 2 (alternate): CC 20-29 - Whitesnake pad ADSR (21-24), octave mix (25), volume (28)
+// Bank 2 (alternate): CC 20-29 - Whitesnake pad ADSR (21-24), octave mix (25),
+// velocity smoothing tau (26), velocity floor / dB-range (27), volume (28).
 const MIDIControllerChannelCallback channel1Bank_21_30_PAD[] = {
     { 21, CC_WhitesnakePadAttack },
     { 22, CC_WhitesnakePadDecay },
     { 23, CC_WhitesnakePadSustain },
     { 24, CC_WhitesnakePadRelease },
     { 25, CC_WhitesnakeOctaveMix },
+    { 26, CC_WhitesnakePadVelocitySmoothing },
+    { 27, CC_WhitesnakePadVelocityFloor },
     { 28, CC_SoundfontVolume },
 };
 const size_t channel1Bank_21_30_PAD_count = sizeof(channel1Bank_21_30_PAD) / sizeof(channel1Bank_21_30_PAD[0]);

@@ -72,12 +72,14 @@ The synthesizer has multiple synthesis modes:
 - Each voice plays both the pressed note and a sub-octave layer mixed by CC 25
 - Standard polyphonic playback across the full keyboard — no split point
 - **Chord-velocity capture**: notes arriving within 30 ms of each other are buffered and fired together at one shared velocity. Compensates for keyboards that strike chord notes at uneven velocities. The shared velocity is:
-  - **30** if any note in the chord is below 30 (and none above 70)
-  - **70** if any note is above 70 (and none below 30)
+  - **20** if any note in the chord is below 20 (and none above 100)
+  - **100** if any note is above 100 (and none below 20)
   - the **median** otherwise (including when the chord spans both extremes)
 
   While any captured note is still held, subsequent notes fire immediately at the pinned velocity.
-- CC 21-25 control pad parameters live (see Soundfont Synthesizer Controls). CC 26-27 are inert in WHITESNAKE since the pad has no filter or crossfade.
+- **Velocity smoothing**: chord-pinned velocities feed a continuous-time EMA whose time constant τ is set by CC 26 (0.5–15 s, exponential). The pad plays each chord at the smoothed value, not the raw chord velocity, so the macro arc of a song (e.g. intro → chorus build) is decoupled from per-chord velocity variation. Held notes added to an already-fired chord match the smoothed level. Long pauses naturally reset the smoother (α → 1 on the next chord).
+- **Velocity floor (dB range)**: CC 27 sets the pre-square floor of the velocity curve (0.0 = full dynamic range, 1.0 = flat). Default 0.25 → amp floor 0.0625 → 24 dB. Higher values compress the dynamic range; lower values open it up.
+- CC 21-28 control pad parameters live (see Soundfont Synthesizer Controls).
 
 ## Control Methods
 
@@ -115,15 +117,25 @@ Connect a MIDI controller or DAW for real-time parameter control:
 > **Note:** CC 21-27 are dual-purpose. The mappings above (and the String CC 21/22 / Drone Volume CC 23 above them) apply in non-soundfont modes. When any soundfont mode is active (SOUNDFONT, TUSK, TUSK_CHORD, WHITESNAKE), CC 21-27 reroute to the Soundfont Synthesizer Controls below.
 
 #### Soundfont Synthesizer Controls (Channel 1) — active in SOUNDFONT, TUSK, TUSK_CHORD, WHITESNAKE
+
+CC 21-24 and CC 28 are shared across all four soundfont modes. CC 25-27 differ by mode and are documented in the subsections below.
+
+**Shared (all soundfont modes):**
 - **CC 21**: Attack (0-127) — exponential, 0.5 ms – 2000 ms
 - **CC 22**: Decay (0-127) — exponential, 0.5 ms – 2000 ms
 - **CC 23**: Sustain (0-127) — linear, 0.0 – 1.0
 - **CC 24**: Release (0-127) — exponential, 5 ms – 5000 ms
-- **CC 25**: *SOUNDFONT/TUSK/TUSK_CHORD*: Filter Cutoff — exponential multiplier of note frequency, 0.5× – 20×
-  *WHITESNAKE*: Sub-Octave Mix (0-127) — linear, 0.0 (no sub) – 1.0 (sub at unity with main)
-- **CC 26**: Filter Resonance (0-127) — linear Q, 0.7 – 5.0 *(SOUNDFONT/TUSK/TUSK_CHORD only; inert in WHITESNAKE)*
-- **CC 27**: Crossfade Duration (0-127) — exponential, 10 ms – 5000 ms *(SOUNDFONT/TUSK/TUSK_CHORD only; inert in WHITESNAKE)*
 - **CC 28**: Soundfont/Pad Volume (0-127) — linear, value × (4/128). **32 = unity**, 127 ≈ 4× boost. Affects both the recorded-instrument soundfont and the Whitesnake pad (they share the downstream mixer gain).
+
+##### SOUNDFONT / TUSK / TUSK_CHORD
+- **CC 25**: Filter Cutoff (0-127) — exponential multiplier of note frequency, 0.5× – 20×
+- **CC 26**: Filter Resonance (0-127) — linear Q, 0.7 – 5.0
+- **CC 27**: Crossfade Duration (0-127) — exponential, 10 ms – 5000 ms
+
+##### WHITESNAKE
+- **CC 25**: Sub-Octave Mix (0-127) — linear, 0.0 (no sub) – 1.0 (sub at unity with main)
+- **CC 26**: Velocity Smoothing τ (0-127) — exponential, 0.5 s – 15 s. Time constant of the EMA on chord velocities. Default at CC 26 = 64 (~2.7 s).
+- **CC 27**: Velocity Floor (0-127) — linear 0.0 – 1.0, pre-square floor of the velocity curve. Default at CC 27 ≈ 32 → 0.25 → amp floor 0.0625 → **24 dB** range. Higher values compress range (e.g. 64 → 12 dB, 127 → flat); lower values expand it.
 
 *Note: ADSR settings layer on top of the SF2's own envelope. The SF2's envelope shapes the wavetable output; the Teensy envelope shapes that further before the filter.*
 
@@ -178,7 +190,8 @@ Connect a MIDI controller or DAW for real-time parameter control:
 
 ### Velocity Response
 - **Input curve** (all modes): a plain linear normalization — float velocity = `MIDI byte / 128`. No clipping, no compensation.
-- **Whitesnake pad output curve**: a square-law amplitude curve, aligned with the `/128` input shaper. Raw MIDI velocity ≤ 30 floors at amp = (0.25)² = 0.0625; ≥ 70 ceilings at amp = 1.0; between, amp = (0.25 + 0.75·t)² where t = (v − 30/128) / (40/128). The squared ramp gives a perceptually natural response with a positive second derivative (concave up). The amp is then quantized to a 0-127 MIDI byte before being passed to the wavetable.
+- **Whitesnake pad output curve**: a square-law amplitude curve, aligned with the `/128` input shaper. Raw MIDI velocity ≤ 20 floors at amp = `floor²`; ≥ 100 ceilings at amp = 1.0; between, amp = `(floor + (1−floor)·t)²` where t = (v − 20/128) / (80/128). The `floor` is set by CC 27 (default 0.25 → amp floor 0.0625 → 24 dB range). The squared ramp gives a perceptually natural response with a positive second derivative (concave up). The amp is then quantized to a 0-127 MIDI byte before being passed to the wavetable.
+- **Whitesnake velocity smoothing**: upstream of the curve, chord-pinned velocities pass through a continuous-time EMA (τ set by CC 26, 0.5–15 s). The smoothed value drives every note in the chord, so per-chord variation is absorbed and the macro arc of a song builds across multiple chords rather than within one.
 
 ### String Pad Polyphonic Behavior
 - **Voice Allocation**: New notes automatically find available voices

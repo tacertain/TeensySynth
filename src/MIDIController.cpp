@@ -32,7 +32,8 @@ static void OnPitchChangeWrapper(byte channel, int bend) {
 }
 
 MIDIController::MIDIController(HybridSynthesizer& synth, USBHost& usbHost, MIDIDevice& midiDevice)
-    : synth(synth), usbHost(usbHost), midiDevice(midiDevice) {
+    : synth(synth), usbHost(usbHost), midiDevice(midiDevice),
+      lastSynthMode(synth.getCurrentMode()) {
     midiControllerInstance = this;
     
     // Initialize all callback tables to null
@@ -58,23 +59,53 @@ void MIDIController::begin() {
     midiDevice.setHandleNoteOn(OnNoteOnWrapper);
     midiDevice.setHandleControlChange(OnControlChangeWrapper);
     midiDevice.setHandlePitchChange(OnPitchChangeWrapper);
+
+    launchkeyDisplay.begin(&midiDevice);
 }
 
 void MIDIController::update() {
     usbHost.Task();
     midiDevice.read();
 
+    uint32_t now = millis();
+
+    // Detect mode transitions to drive Extended-mode entry/exit on the Launchkey.
+    HybridSynthesizer::SynthMode currentMode = synth.getCurrentMode();
+    if (currentMode != lastSynthMode) {
+        if (currentMode == HybridSynthesizer::WHITESNAKE) {
+            launchkeyDisplay.activate();
+        } else if (lastSynthMode == HybridSynthesizer::WHITESNAKE) {
+            launchkeyDisplay.deactivate();
+        }
+        lastSynthMode = currentMode;
+    }
+
     // Drive the chord-velocity capture window. Only meaningful in WHITESNAKE;
     // elsewhere we keep capture state reset so re-entering the mode starts clean.
-    if (synth.getCurrentMode() == HybridSynthesizer::WHITESNAKE) {
+    if (currentMode == HybridSynthesizer::WHITESNAKE) {
         ChordVelocityCapture::PendingNote pending[ChordVelocityCapture::MAX_PENDING_OUT];
-        int n = chordCapture.tick(millis(), pending, ChordVelocityCapture::MAX_PENDING_OUT);
-        for (int i = 0; i < n; ++i) {
-            fireSynthNoteOn(pending[i].channel, pending[i].note, pending[i].velocity);
+        int n = chordCapture.tick(now, pending, ChordVelocityCapture::MAX_PENDING_OUT);
+        if (n > 0) {
+            // All pending notes share the same chord-pinned velocity; feed
+            // it into the smoother once and use the smoothed value for the
+            // whole chord.
+            byte rawVel = pending[0].velocity;
+            byte smoothedVel = velocitySmoother.onChordFire(rawVel, now);
+            launchkeyDisplay.onChord(rawVel, smoothedVel, now);
+            for (int i = 0; i < n; ++i) {
+                fireSynthNoteOn(pending[i].channel, pending[i].note, smoothedVel);
+            }
+            // Re-level every currently-held voice (new + previously held) to
+            // the smoothed value, so held chords track the evolving blend.
+            synth.getWhitesnakePad().setHeldLevel(smoothedVel / 128.0f);
         }
     } else {
         chordCapture.reset();
+        velocitySmoother.reset();
     }
+
+    // Animate the bottom-row brightness decay (no-op outside Extended mode).
+    launchkeyDisplay.tick(now, velocitySmoother.getTauMs());
 }
 
 float MIDIController::midiNoteToFrequency(byte note) {
@@ -95,14 +126,12 @@ void MIDIController::handleNoteOn(byte channel, byte note, byte velocity) {
     Serial.println();
 
     if (synth.getCurrentMode() == HybridSynthesizer::WHITESNAKE) {
-        auto result = chordCapture.onNoteOn(channel, note, velocity, millis());
-        if (result.fire) {
-            fireSynthNoteOn(channel, note, result.velocity);
-        } else {
-            Serial.println("  (buffered for chord-velocity capture)");
-        }
+        // Always buffered into a capture window; the chord fires from tick().
+        chordCapture.onNoteOn(channel, note, velocity, millis());
+        Serial.println("  (buffered for chord-velocity capture)");
     } else {
         chordCapture.reset();
+        velocitySmoother.reset();
         fireSynthNoteOn(channel, note, velocity);
     }
 }
@@ -128,6 +157,9 @@ void MIDIController::handleNoteOff(byte channel, byte note, byte velocity) {
 
     if (synth.getCurrentMode() == HybridSynthesizer::WHITESNAKE) {
         chordCapture.onNoteOff(note);
+        if (!chordCapture.hasHeldNotes()) {
+            launchkeyDisplay.clearTopRow();
+        }
     }
     synth.noteOff(channel, note);
 }

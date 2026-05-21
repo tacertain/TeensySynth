@@ -1,30 +1,26 @@
 #include "ChordVelocityCapture.h"
 
-ChordVelocityCapture::NoteOnResult ChordVelocityCapture::onNoteOn(
+void ChordVelocityCapture::onNoteOn(
     byte channel, byte note, byte velocity, uint32_t nowMs) {
+
+    addHeld(note);  // track held keys independent of the capture window
 
     switch (state) {
         case IDLE:
+            // Open a fresh window. Note: do NOT clear heldCount here -- earlier
+            // chords may still be held while this new window opens.
             state = CAPTURING;
             bufferCount = 0;
-            heldCount = 0;
             buffer[bufferCount++] = {channel, note, velocity};
-            addHeld(note);
             windowDeadline = nowMs + WINDOW_MS;
-            return {false, 0};
+            return;
 
         case CAPTURING:
             if (bufferCount < MAX_BUFFER) {
                 buffer[bufferCount++] = {channel, note, velocity};
             }
-            addHeld(note);
-            return {false, 0};
-
-        case HOLDING:
-            addHeld(note);
-            return {true, pinnedVelocity};
+            return;
     }
-    return {true, velocity};  // unreachable; defensive
 }
 
 void ChordVelocityCapture::onNoteOff(byte note) {
@@ -64,15 +60,18 @@ int ChordVelocityCapture::tick(uint32_t nowMs, PendingNote* out, int maxOut) {
         sorted[j + 1] = key;
     }
 
+    // Clamp bounds track SoundfontPadSynthesizer's velocity window (20..100):
+    // a chord that brackets the window pins to the median, but a one-sided
+    // chord pins to the relevant boundary so the smoother sees usable values.
     byte minVel = sorted[0];
     byte maxVel = sorted[bufferCount - 1];
-    bool hasLow = minVel < 30;
-    bool hasHigh = maxVel > 70;
+    bool hasLow = minVel < 20;
+    bool hasHigh = maxVel > 100;
 
     if (hasLow && !hasHigh) {
-        pinnedVelocity = 30;
+        pinnedVelocity = 20;
     } else if (hasHigh && !hasLow) {
-        pinnedVelocity = 70;
+        pinnedVelocity = 100;
     } else if (bufferCount % 2 == 1) {
         pinnedVelocity = sorted[bufferCount / 2];
     } else {
@@ -85,7 +84,7 @@ int ChordVelocityCapture::tick(uint32_t nowMs, PendingNote* out, int maxOut) {
         out[i] = {buffer[i].channel, buffer[i].note, pinnedVelocity};
     }
     bufferCount = 0;
-    state = HOLDING;
+    state = IDLE;  // window closed; next struck note opens a new window
     return n;
 }
 

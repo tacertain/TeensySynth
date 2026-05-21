@@ -7,6 +7,8 @@
 // Project headers
 #include "HybridSynthesizer.h"
 #include "ChordVelocityCapture.h"
+#include "VelocitySmoother.h"
+#include "LaunchkeyDisplay.h"
 
 // Forward declaration
 class MIDIController;
@@ -47,6 +49,12 @@ public:
     
     // Accessor for synthesizer (needed by callback functions)
     HybridSynthesizer& getSynth() { return synth; }
+
+    // Accessor for the WHITESNAKE velocity smoother (CC26 tunes its time constant).
+    VelocitySmoother& getVelocitySmoother() { return velocitySmoother; }
+
+    // Accessor for the Launchkey MK2 pad display (driven by the pad synth observer).
+    LaunchkeyDisplay& getLaunchkeyDisplay() { return launchkeyDisplay; }
     
 private:
     HybridSynthesizer& synth;
@@ -67,6 +75,18 @@ private:
     // clean IDLE state rather than picking up whatever HOLDING/CAPTURING
     // state was active when the mode last switched away.
     ChordVelocityCapture chordCapture;
+
+    // Continuous-time EMA on chord-pinned velocities. Updates once per
+    // chord-fire from chordCapture.tick(); its output re-levels all held
+    // voices via pad.setHeldLevel(). CC26 sets the time constant (tau). Reset
+    // alongside chordCapture when leaving WHITESNAKE so re-entering starts clean.
+    VelocitySmoother velocitySmoother;
+
+    // Drives the Launchkey MK2 pads as a velocity visualization for the
+    // Whitesnake pad (Basic-mode pad lighting). Activated/deactivated on
+    // WHITESNAKE entry/exit; fed from the chord-fire path in update().
+    LaunchkeyDisplay launchkeyDisplay;
+    HybridSynthesizer::SynthMode lastSynthMode;
 
     // Helper functions for MIDI processing
     float midiNoteToFrequency(byte note);

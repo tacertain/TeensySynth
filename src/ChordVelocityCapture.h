@@ -10,14 +10,16 @@
  * keyboard.
  *
  * Flow:
- *  - First noteOn opens a WINDOW_MS capture window; that note plus any
- *    others arriving inside the window are buffered (not fired).
+ *  - Any noteOn (from IDLE) opens a WINDOW_MS capture window; that note plus
+ *    any others arriving inside the window are buffered (not fired).
  *  - When the window closes, the buffered notes all fire at the median of
- *    their velocities. The median is "pinned".
- *  - While at least one note remains held, subsequent noteOns fire
- *    immediately at the pinned velocity.
- *  - When the last held note is released (via noteOff), state resets so
- *    the next noteOn starts a fresh capture.
+ *    their velocities (the "pinned" velocity), and capture resets to IDLE.
+ *  - So a note struck while an earlier chord is still held opens a *new*
+ *    window and produces a *new* pinned velocity. The caller feeds that into
+ *    the smoother and applies the result to all currently-held voices; this
+ *    class does not pin subsequent notes to a prior chord's velocity.
+ *  - Held-note tracking is kept only so the caller can ask hasHeldNotes()
+ *    (e.g. to know when all keys are released). It does not gate firing.
  *
  * Driver responsibilities:
  *  - Call onNoteOn / onNoteOff for every MIDI event when capture should
@@ -34,11 +36,6 @@ public:
     static constexpr int MAX_HELD = 32;     // held-note ceiling
     static constexpr int MAX_PENDING_OUT = MAX_BUFFER;
 
-    struct NoteOnResult {
-        bool fire;       // true = caller should fire synth.noteOn now
-        byte velocity;   // velocity to use when firing
-    };
-
     struct PendingNote {
         byte channel;
         byte note;
@@ -47,7 +44,9 @@ public:
 
     ChordVelocityCapture() = default;
 
-    NoteOnResult onNoteOn(byte channel, byte note, byte velocity, uint32_t nowMs);
+    // Buffers the note into the current (or a new) capture window. Notes never
+    // fire from here; they fire from tick() when the window closes.
+    void onNoteOn(byte channel, byte note, byte velocity, uint32_t nowMs);
 
     // The noteOff itself should always be forwarded to the synth by the caller;
     // this just updates internal held-note tracking and buffer cleanup.
@@ -59,8 +58,11 @@ public:
 
     void reset();
 
+    // True while at least one note from the current chord is still held.
+    bool hasHeldNotes() const { return heldCount > 0; }
+
 private:
-    enum State { IDLE, CAPTURING, HOLDING };
+    enum State { IDLE, CAPTURING };
 
     struct BufferedNote {
         byte channel;

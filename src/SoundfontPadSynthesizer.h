@@ -51,6 +51,24 @@ public:
     void setRelease(float milliseconds);
     void setADSR(float attack, float decay, float sustain, float release);
 
+    // Linear floor of the velocity curve before squaring. 0.0 = full
+    // dynamic range (silent at minimum velocity); 1.0 = flat (no velocity
+    // dynamics). Default 0.25 -> amp floor 0.0625 -> 24 dB range.
+    void setVelocityFloor(float floor);
+    float getVelocityFloor() const { return velocityFloor; }
+
+    // Live expression multiplier (0..1, default 1.0) applied on top of the
+    // per-chord velocity amplitude to every sounding voice. Intended for the
+    // expression pedal / aftertouch swell. Updates currently-playing voices.
+    void setExpression(float e);
+    float getExpression() const { return expression; }
+
+    // Set the amplitude of every currently-held (key-down) voice from a MIDI
+    // velocity (0..1 float). Released-but-sounding voices keep their level.
+    // Called per chord with the smoother's blended velocity so held chords
+    // track the evolving level.
+    void setHeldLevel(float velocity);
+
     AudioStream* getOutput();
 
 private:
@@ -86,6 +104,19 @@ private:
     float decayMs;
     float sustainLevel;
     float releaseMs;
+    float velocityFloor;
+
+    // Per-voice amplitude (square-law curve of the smoothed velocity) captured
+    // at each voice's noteOn, and a global live expression multiplier. Per-voice
+    // main gain = voiceBaseAmp[i] * expression; sub gain multiplies by octaveMix.
+    // Per-voice (not global) so that releasing voices keep their own level and
+    // don't jump when a new chord is struck. Expression is the live swell
+    // (pedal/aftertouch) that scales every sounding voice.
+    float voiceBaseAmp[NUM_VOICES];
+    float expression;
+
+    // Square-law velocity-to-amplitude curve (uses velocityFloor / 20..100 window).
+    float velocityToAmp(float velocity) const;
 
     int findAvailableVoice();
     int findVoicePlayingNote(int midiNote);
