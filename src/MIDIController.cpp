@@ -64,8 +64,35 @@ void MIDIController::begin() {
 }
 
 void MIDIController::update() {
+    // Per-phase timing. The freeze happens somewhere inside this function (it's
+    // the only thing in loop() that touches USB), so log any call that drags
+    // past 1 ms — the last "slow" line before the LED freezes will identify
+    // exactly which call wedged.
+    constexpr uint32_t PHASE_SLOW_THRESHOLD_US = 1000;
+    uint32_t t = micros();
     usbHost.Task();
+    uint32_t dt = micros() - t;
+    if (dt > PHASE_SLOW_THRESHOLD_US) {
+        Serial.printf("phase slow: usbHost.Task %luus\n", (unsigned long)dt);
+    }
+
+    t = micros();
     midiDevice.read();
+    dt = micros() - t;
+    if (dt > PHASE_SLOW_THRESHOLD_US) {
+        Serial.printf("phase slow: midiDevice.read %luus\n", (unsigned long)dt);
+    }
+
+    // Detect USB-level Launchkey disconnect/reconnect. Stage-1 of the hang
+    // (input dies, output still works) could be either a device disconnect or
+    // a device that's still claimed but stopped sending — this disambiguates.
+    static bool wasConnected = false;
+    bool nowConnected = (bool)midiDevice;
+    if (nowConnected != wasConnected) {
+        Serial.printf("LK device state -> %s\n",
+                      nowConnected ? "connected" : "disconnected");
+        wasConnected = nowConnected;
+    }
 
     uint32_t now = millis();
 
@@ -82,6 +109,7 @@ void MIDIController::update() {
 
     // Drive the chord-velocity capture window. Only meaningful in WHITESNAKE;
     // elsewhere we keep capture state reset so re-entering the mode starts clean.
+    t = micros();
     if (currentMode == HybridSynthesizer::WHITESNAKE) {
         ChordVelocityCapture::PendingNote pending[ChordVelocityCapture::MAX_PENDING_OUT];
         int n = chordCapture.tick(now, pending, ChordVelocityCapture::MAX_PENDING_OUT);
@@ -103,9 +131,18 @@ void MIDIController::update() {
         chordCapture.reset();
         velocitySmoother.reset();
     }
+    dt = micros() - t;
+    if (dt > PHASE_SLOW_THRESHOLD_US) {
+        Serial.printf("phase slow: chord/onChord %luus\n", (unsigned long)dt);
+    }
 
     // Animate the bottom-row brightness decay (no-op outside Extended mode).
+    t = micros();
     launchkeyDisplay.tick(now, velocitySmoother.getTauMs());
+    dt = micros() - t;
+    if (dt > PHASE_SLOW_THRESHOLD_US) {
+        Serial.printf("phase slow: launchkey.tick %luus\n", (unsigned long)dt);
+    }
 }
 
 float MIDIController::midiNoteToFrequency(byte note) {

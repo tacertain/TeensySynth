@@ -73,6 +73,15 @@ private:
     uint32_t lastChordMs;
     int lastBottomLevel;  // -1 = off / not yet drawn
 
+    // USB-MIDI send instrumentation. write_packed() in USBHost_t36 is a busy
+    // wait when its tx buffers are full, so individual sends can stall for
+    // ms-scale times that hang loop(); the counter surfaces the steady-state
+    // rate, the slow-send log surfaces individual stalls. lastReportedRateZero
+    // suppresses runs of "rate: 0/s" lines so an idle session stays quiet.
+    uint32_t sendCount;
+    uint32_t sendCountStartMs;
+    bool lastReportedRateZero;
+
     static int stepsForVelocity(byte velocity);
     static int brightnessLevel(float decay);
 
@@ -80,5 +89,6 @@ private:
     void renderBottomRow(int level);
     void setTopPad(int column, byte color);
     void setBottomPad(int column, byte color);
+    void sendPadNoteOn(byte padNote, byte color, char row, int column);
     void clearAllPads();
 };

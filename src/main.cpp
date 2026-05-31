@@ -25,6 +25,7 @@ uint32_t count = 0;
 void setup()
 {
     //while (!Serial);
+    pinMode(LED_BUILTIN, OUTPUT);
     midiController.begin();
     AudioMemory(32); // Memory for audio processing
 
@@ -60,15 +61,20 @@ void setup()
 
 void loop()
 {
-#if 0
-    static uint64_t i = 0;
-    if (++i % 1000000 == 0) {
-        Serial.print("Alive ");
-        Serial.print(i / 1000000);
-        Serial.print(" ");
-        Serial.println(count);
+    // 0.5 Hz heartbeat on the onboard LED: toggle once per second so a full
+    // on/off cycle is 2 s. If loop() hangs, the LED freezes on whatever it was
+    // last set to; if the framework's fault_isr fires, it overrides this with
+    // the SOS blink pattern. Either way the LED tells us at a glance whether
+    // loop() is alive.
+    static uint32_t lastLedToggleMs = 0;
+    static bool ledState = false;
+    uint32_t nowMs = millis();
+    if (nowMs - lastLedToggleMs >= 1000) {
+        ledState = !ledState;
+        digitalWrite(LED_BUILTIN, ledState);
+        lastLedToggleMs = nowMs;
     }
-#endif
+
     midiController.update();
     
     // Update synthesizer envelopes and other processing

@@ -1,4 +1,5 @@
 #include "LaunchkeyDisplay.h"
+#include "hardware_config.h"
 #include <math.h>
 
 // Pad note numbers in Basic mode (Programmer's Reference, "Lighting Pads in
@@ -41,12 +42,21 @@ static constexpr uint8_t LK_CHANNEL = 16;       // 1-indexed in USBHost_t36
 static constexpr int VEL_MIN = 20;
 static constexpr int VEL_MAX = 100;
 
+// Above this, sendNoteOn almost certainly spun inside write_packed waiting for
+// a USB tx buffer to drain. Normal enqueue is sub-microsecond, so 100 is well
+// clear of noise while still catching partial-spin sends that didn't drag long
+// enough to trip a higher bar.
+static constexpr uint32_t SEND_SLOW_THRESHOLD_US = 100;
+
 LaunchkeyDisplay::LaunchkeyDisplay()
     : device(nullptr), active(false), haveChord(false),
-      topSteps(0), bottomSteps(0), lastChordMs(0), lastBottomLevel(-1) {}
+      topSteps(0), bottomSteps(0), lastChordMs(0), lastBottomLevel(-1),
+      sendCount(0), sendCountStartMs(0), lastReportedRateZero(false) {}
 
 void LaunchkeyDisplay::begin(MIDIDevice* dev) {
     device = dev;
+    pinMode(SCOPE_TRIG_PIN, OUTPUT);
+    digitalWriteFast(SCOPE_TRIG_PIN, LOW);
 }
 
 void LaunchkeyDisplay::activate() {
@@ -77,6 +87,27 @@ void LaunchkeyDisplay::onChord(byte rawVel, byte blendedVel, uint32_t nowMs) {
 }
 
 void LaunchkeyDisplay::tick(uint32_t nowMs, float tauMs) {
+    // Per-second LK MIDI send-rate report. Runs whenever the display is
+    // active (independent of haveChord) so we catch send bursts from activate/
+    // deactivate too. Spikes near USB bandwidth are an early warning for the
+    // write_packed-spin hang.
+    if (active) {
+        if (sendCountStartMs == 0) sendCountStartMs = nowMs;
+        if ((nowMs - sendCountStartMs) >= 1000) {
+            // Suppress consecutive zero-rate lines so the log stays clean
+            // during idle periods. The first zero after activity still prints
+            // as a "things quieted down" marker; further zeros are dropped
+            // until activity resumes.
+            bool isZero = (sendCount == 0);
+            if (!isZero || !lastReportedRateZero) {
+                Serial.printf("LK send rate: %lu/s\n", (unsigned long)sendCount);
+            }
+            lastReportedRateZero = isZero;
+            sendCount = 0;
+            sendCountStartMs = nowMs;
+        }
+    }
+
     if (device == nullptr || !active || !haveChord) return;
     if (tauMs < 1.0f) tauMs = 1.0f;
     float dt = (float)(nowMs - lastChordMs);  // uint32 subtraction is wrap-safe
@@ -132,11 +163,27 @@ void LaunchkeyDisplay::renderBottomRow(int level) {
 }
 
 void LaunchkeyDisplay::setTopPad(int column, byte color) {
-    device->sendNoteOn(TOP_ROW_NOTES[column], color, LK_CHANNEL, INCONTROL_CABLE);
+    sendPadNoteOn(TOP_ROW_NOTES[column], color, 't', column);
 }
 
 void LaunchkeyDisplay::setBottomPad(int column, byte color) {
-    device->sendNoteOn(BOTTOM_ROW_NOTES[column], color, LK_CHANNEL, INCONTROL_CABLE);
+    sendPadNoteOn(BOTTOM_ROW_NOTES[column], color, 'b', column);
+}
+
+void LaunchkeyDisplay::sendPadNoteOn(byte padNote, byte color, char row, int column) {
+    // Trigger pin HIGH spans the exact duration of the underlying USB call:
+    // on the scope this gives one pulse per outbound packet, and a permanently
+    // HIGH line is a positive marker that we're stuck inside write_packed.
+    digitalWriteFast(SCOPE_TRIG_PIN, HIGH);
+    uint32_t t0 = micros();
+    device->sendNoteOn(padNote, color, LK_CHANNEL, INCONTROL_CABLE);
+    uint32_t dt = micros() - t0;
+    digitalWriteFast(SCOPE_TRIG_PIN, LOW);
+    sendCount++;
+    if (dt > SEND_SLOW_THRESHOLD_US) {
+        Serial.printf("LK send slow: %luus %c%d color=%02X\n",
+                      (unsigned long)dt, row, column, color);
+    }
 }
 
 void LaunchkeyDisplay::clearAllPads() {

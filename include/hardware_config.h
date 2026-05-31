@@ -33,6 +33,16 @@
 // DIN:        7
 
 // ============================================================================
+// Diagnostics
+// ============================================================================
+// GPIO pulsed HIGH around each USB MIDI send to the Launchkey, for scope
+// correlation against power-rail captures. The pulse stays HIGH for the full
+// duration of the underlying device->sendNoteOn() call, so if write_packed
+// busy-waits this pin will stay HIGH for the duration of the spin (including
+// indefinitely if loop() has hung inside the call).
+#define SCOPE_TRIG_PIN 2
+
+// ============================================================================
 // Feature Flags
 // ============================================================================
 // Uncomment to enable TFT display - will hang if enabled but not attached
