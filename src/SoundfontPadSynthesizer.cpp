@@ -10,6 +10,8 @@ SoundfontPadSynthesizer::SoundfontPadSynthesizer()
     , sustainLevel(1.0f)
     , releaseMs(800.0f)
     , velocityFloor(0.25f)
+    , hpMultiplier(3.1f)
+    , hpMix(1.0f)
     , expression(1.0f)
 {
     for (int i = 0; i < NUM_VOICES; ++i) {
@@ -18,6 +20,8 @@ SoundfontPadSynthesizer::SoundfontPadSynthesizer()
         voiceStates[i].noteOnTime = 0;
         voiceBaseAmp[i] = 0.0f;
         mainToVoiceMixer[i] = nullptr;
+        mainToHpFilter[i] = nullptr;
+        hpFilterToVoiceMixer[i] = nullptr;
         subToVoiceMixer[i] = nullptr;
         voiceMixerToEnvelope[i] = nullptr;
         envelopeToMixer[i] = nullptr;
@@ -27,6 +31,9 @@ SoundfontPadSynthesizer::SoundfontPadSynthesizer()
 
     for (int i = 0; i < NUM_VOICES; ++i) {
         mainToVoiceMixer[i]     = new AudioConnection(mainVoices[i], 0, voiceMixers[i], 0);
+        mainToHpFilter[i]       = new AudioConnection(mainVoices[i], 0, hpFilters[i],   0);
+        // State-variable filter output port 2 = highpass
+        hpFilterToVoiceMixer[i] = new AudioConnection(hpFilters[i],  2, voiceMixers[i], 2);
         subToVoiceMixer[i]      = new AudioConnection(subVoices[i],  0, voiceMixers[i], 1);
         voiceMixerToEnvelope[i] = new AudioConnection(voiceMixers[i], 0, envelopes[i], 0);
 
@@ -50,6 +57,8 @@ SoundfontPadSynthesizer::SoundfontPadSynthesizer()
 SoundfontPadSynthesizer::~SoundfontPadSynthesizer() {
     for (int i = 0; i < NUM_VOICES; ++i) {
         delete mainToVoiceMixer[i];
+        delete mainToHpFilter[i];
+        delete hpFilterToVoiceMixer[i];
         delete subToVoiceMixer[i];
         delete voiceMixerToEnvelope[i];
         delete envelopeToMixer[i];
@@ -87,6 +96,12 @@ void SoundfontPadSynthesizer::noteOn(int midiNote, float velocity) {
 
     mainVoices[voiceIndex].setInstrument(*instrumentData);
     subVoices[voiceIndex].setInstrument(*instrumentData);
+
+    // Per-voice HP cutoff = noteHz * hpMultiplier, pinned at noteOn. Does not
+    // track pitch bend (not used in WHITESNAKE) -- if we ever add bend, retune
+    // sounding voices' filters from the global bend value.
+    float noteHz = 440.0f * powf(2.0f, ((float)midiNote - 69.0f) / 12.0f);
+    hpFilters[voiceIndex].frequency(noteHz * hpMultiplier);
 
     float amp = velocityToAmp(velocity);
     voiceBaseAmp[voiceIndex] = amp;
@@ -139,9 +154,9 @@ void SoundfontPadSynthesizer::setOctaveMix(float mix) {
 void SoundfontPadSynthesizer::updateVoiceMixerGains() {
     for (int i = 0; i < NUM_VOICES; ++i) {
         float mainGain = voiceBaseAmp[i] * expression;
-        voiceMixers[i].gain(0, mainGain);             // main
+        voiceMixers[i].gain(0, mainGain);             // main (dry)
         voiceMixers[i].gain(1, mainGain * octaveMix); // sub
-        voiceMixers[i].gain(2, 0.0f);
+        voiceMixers[i].gain(2, mainGain * hpMix);     // main (HP)
         voiceMixers[i].gain(3, 0.0f);
     }
 }
@@ -234,6 +249,22 @@ void SoundfontPadSynthesizer::setVelocityFloor(float floor) {
     velocityFloor = constrain(floor, 0.0f, 1.0f);
 }
 
+void SoundfontPadSynthesizer::setHighpassMultiplier(float m) {
+    hpMultiplier = constrain(m, 1.0f, 4.0f);
+    // Re-push cutoff for every sounding voice using its captured note.
+    for (int i = 0; i < NUM_VOICES; ++i) {
+        int n = voiceStates[i].midiNote;
+        if (n < 0) continue;
+        float noteHz = 440.0f * powf(2.0f, ((float)n - 69.0f) / 12.0f);
+        hpFilters[i].frequency(noteHz * hpMultiplier);
+    }
+}
+
+void SoundfontPadSynthesizer::setHighpassMix(float m) {
+    hpMix = constrain(m, 0.0f, 2.0f);
+    updateVoiceMixerGains();
+}
+
 int SoundfontPadSynthesizer::findAvailableVoice() {
     // A voice is only truly free when the key is up AND the envelope has
     // finished its release tail. Otherwise we'd cut off releasing notes —
@@ -283,11 +314,16 @@ int SoundfontPadSynthesizer::findOldestVoice() {
 
 void SoundfontPadSynthesizer::updateMixerGains() {
     // Whitesnake VS samples already have >12 dB of internal headroom, so the
-    // usual per-voice 0.25 attenuation isn't needed. Run unity here and let
-    // master/mode gains downstream handle balance.
+    // usual per-voice 0.25 attenuation isn't needed. A 0.9 pad is applied per
+    // voice as a safety margin: the HP overlay branch (voiceMixers slot 2) can
+    // push up to hpMix = 2.0, which at full velocity + hpMix=2 + octaveMix=1
+    // sums roughly main + 2*HP + sub against the same sample headroom and
+    // CAN clip at full master + soundfont volume on dense chords. Drop volume
+    // (or master/mode gains) further if the whitesnakePadPeakMonitor reports
+    // clipping; do not raise the per-voice pad back to unity.
     for (int i = 0; i < 4; ++i) {
-        mixerA.gain(i, volume);
-        mixerB.gain(i, volume);
+        mixerA.gain(i, volume * 0.9f);
+        mixerB.gain(i, volume * 0.9f);
     }
     finalMixer.gain(0, 1.0f);
     finalMixer.gain(1, 1.0f);

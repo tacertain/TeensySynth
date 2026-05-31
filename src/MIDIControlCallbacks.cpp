@@ -141,13 +141,6 @@ void CC_WhitesnakePadRelease(MIDIController* controller, byte channel, byte cont
     Serial.printf("Whitesnake Pad Release: %.1f ms (CC %d = %d)\n", releaseMs, control, value);
 }
 
-void CC_WhitesnakePadVelocitySmoothing(MIDIController* controller, byte channel, byte control, byte value) {
-    // Map 0-127 to 500ms - 15000ms (exponential): tau = 500 * 30^(v/127).
-    float tauMs = 500.0f * pow(30.0f, (float)value / 127.0f);
-    controller->getVelocitySmoother().setTauMs(tauMs);
-    Serial.printf("Whitesnake Velocity Smoothing tau: %.0f ms (CC %d = %d)\n", tauMs, control, value);
-}
-
 void CC_WhitesnakePadVelocityFloor(MIDIController* controller, byte channel, byte control, byte value) {
     // Linear 0..127 -> 0..1.0. This is the pre-square floor of the velocity curve;
     // amp floor is its square. Default ~32 -> 0.25 -> 24 dB range.
@@ -155,6 +148,20 @@ void CC_WhitesnakePadVelocityFloor(MIDIController* controller, byte channel, byt
     controller->getSynth().getWhitesnakePad().setVelocityFloor(floor);
     Serial.printf("Whitesnake Velocity Floor: %.3f (amp floor %.4f) (CC %d = %d)\n",
                   floor, floor * floor, control, value);
+}
+
+void CC_WhitesnakePadHighpassMultiplier(MIDIController* controller, byte channel, byte control, byte value) {
+    // Linear 0..127 -> 1.0x..4.0x cutoff multiplier of note frequency.
+    float m = 1.0f + (float)value * (3.0f / 127.0f);
+    controller->getSynth().getWhitesnakePad().setHighpassMultiplier(m);
+    Serial.printf("Whitesnake HP Multiplier: %.2fx (CC %d = %d)\n", m, control, value);
+}
+
+void CC_WhitesnakePadHighpassMix(MIDIController* controller, byte channel, byte control, byte value) {
+    // Linear 0..127 -> 0.0..2.0 gain on the HP branch. Default at value=64 -> ~1.0.
+    float mix = (float)value * (2.0f / 127.0f);
+    controller->getSynth().getWhitesnakePad().setHighpassMix(mix);
+    Serial.printf("Whitesnake HP Mix: %.3f (CC %d = %d)\n", mix, control, value);
 }
 
 void CC_StringPadVolume(MIDIController* controller, byte channel, byte control, byte value) {
@@ -396,16 +403,19 @@ const MIDIControllerChannelCallback channel1Bank_21_30_SF[] = {
 const size_t channel1Bank_21_30_SF_count = sizeof(channel1Bank_21_30_SF) / sizeof(channel1Bank_21_30_SF[0]);
 
 // Bank 2 (alternate): CC 20-29 - Whitesnake pad ADSR (21-24), octave mix (25),
-// velocity smoothing tau (26), velocity floor / dB-range (27), volume (28).
+// velocity floor / dB-range (26), HP cutoff multiplier (27), HP branch mix (28).
+// Velocity smoother runs at its fixed default tau (~2.7 s) -- no CC binding.
+// Soundfont/pad volume (formerly CC 28) is not bound in this bank; use CC 7
+// master volume in WHITESNAKE.
 const MIDIControllerChannelCallback channel1Bank_21_30_PAD[] = {
     { 21, CC_WhitesnakePadAttack },
     { 22, CC_WhitesnakePadDecay },
     { 23, CC_WhitesnakePadSustain },
     { 24, CC_WhitesnakePadRelease },
     { 25, CC_WhitesnakeOctaveMix },
-    { 26, CC_WhitesnakePadVelocitySmoothing },
-    { 27, CC_WhitesnakePadVelocityFloor },
-    { 28, CC_SoundfontVolume },
+    { 26, CC_WhitesnakePadVelocityFloor },
+    { 27, CC_WhitesnakePadHighpassMultiplier },
+    { 28, CC_WhitesnakePadHighpassMix },
 };
 const size_t channel1Bank_21_30_PAD_count = sizeof(channel1Bank_21_30_PAD) / sizeof(channel1Bank_21_30_PAD[0]);
 

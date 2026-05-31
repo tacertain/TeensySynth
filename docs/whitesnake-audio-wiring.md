@@ -10,37 +10,56 @@ the multiplicative factor applied at each mixer slot.
                         │
                         │  (8 polyphonic voices, mono)
                         ▼
-   ┌─────────────────────────────────────────────────────────────┐
-   │  SoundfontPadSynthesizer  (SoundfontPadSynthesizer.cpp)     │
-   │                                                             │
-   │   Per voice (i = 0..7) — each is its own sub-osc cell:      │
-   │                                                             │
-   │       mainVoices[i]──►┐                                     │
-   │         plays note N   ├ voiceMixers[i] ── envelopes[i] ──► │
-   │                        │   gain(0)=1.0                      │
-   │       subVoices[i] ──►┘   gain(1)=octaveMix                 │
-   │         plays note N−12      (default 1/3, CC 25 live)      │
-   │         (skipped if N<12)                                   │
-   │                                                             │
-   │   Voices 0–3 sum into mixerA, 4–7 into mixerB, both into    │
-   │   finalMixer; per-voice slot gains on mixerA/B = volume     │
-   │   (defaults to 1.0). finalMixer slots [0]=[1]=1.0.          │
-   │                                                             │
-   │       v0──►envA[0]──┐                                       │
-   │       v1──►envA[1]──┤──►mixerA──┐                           │
-   │       v2──►envA[2]──┤            │                          │
-   │       v3──►envA[3]──┘            ├──►finalMixer──► getOutput()
-   │       v4──►envA[4]──┐            │                          │
-   │       v5──►envA[5]──┤──►mixerB──┘                           │
-   │       v6──►envA[6]──┤                                       │
-   │       v7──►envA[7]──┘                                       │
-   │                                                             │
-   │   `volume` defaults to 1.0. The Whitesnake VS samples carry │
-   │   >12 dB of internal headroom, so per-voice unity is safe — │
-   │   pad voices don't sum to clipping in practice. Sub-osc at  │
-   │   mix=1.0 adds up to ~6 dB on top of main; still inside     │
-   │   the headroom envelope.                                    │
-   └─────────────────────────────────────────────────────────────┘
+   ┌──────────────────────────────────────────────────────────────────┐
+   │  SoundfontPadSynthesizer  (SoundfontPadSynthesizer.cpp)          │
+   │                                                                  │
+   │   Per voice (i = 0..7) — main is split into a dry path and a     │
+   │   highpass branch, then summed with the sub-octave:              │
+   │                                                                  │
+   │       mainVoices[i] ──┬─────────────────────► voiceMixers[i].0   │
+   │         plays note N  │                       gain = mainAmp     │
+   │                       │                                          │
+   │                       └─► hpFilters[i] ─────► voiceMixers[i].2   │
+   │                          (state-variable HP)  gain = mainAmp     │
+   │                          cutoff = noteHz             * hpMix     │
+   │                                 * hpMultiplier      (CC 28,      │
+   │                          (CC 27, 1.0x–4.0x,          0.0–2.0,    │
+   │                           default 3.1x)              default 1.0)│
+   │                                                                  │
+   │       subVoices[i]  ────────────────────────► voiceMixers[i].1   │
+   │         plays note N−12                       gain = mainAmp     │
+   │         (skipped if N<12)                            * octaveMix │
+   │                                                     (CC 25)      │
+   │                                                                  │
+   │                          voiceMixers[i] ──► envelopes[i] ──►     │
+   │                                                                  │
+   │   `mainAmp` = `voiceBaseAmp[i] * expression` (square-law         │
+   │   velocity curve captured at noteOn; `expression` is the live    │
+   │   swell scalar). Voices 0–3 sum into mixerA, 4–7 into mixerB,    │
+   │   both into finalMixer; per-voice slot gains on mixerA/B =       │
+   │   `volume * 0.9` (volume defaults to 1.0; the 0.9 is a HP-       │
+   │   overlay safety pad — see headroom note below). finalMixer      │
+   │   slots [0]=[1]=1.0.                                             │
+   │                                                                  │
+   │       v0──►envA[0]──┐                                            │
+   │       v1──►envA[1]──┤──►mixerA──┐                                │
+   │       v2──►envA[2]──┤            │                               │
+   │       v3──►envA[3]──┘            ├──►finalMixer──► getOutput()   │
+   │       v4──►envA[4]──┐            │                               │
+   │       v5──►envA[5]──┤──►mixerB──┘                                │
+   │       v6──►envA[6]──┤                                            │
+   │       v7──►envA[7]──┘                                            │
+   │                                                                  │
+   │   The Whitesnake VS samples carry >12 dB of internal headroom,   │
+   │   which used to make per-voice unity safe. With the HP overlay   │
+   │   live, a single voice can now sum main + 2×HP + sub against     │
+   │   the same headroom budget (at hpMix=2.0, octaveMix=1.0, full    │
+   │   velocity), which CAN clip on dense chords at full master +     │
+   │   soundfont volume. The per-voice 0.9 pad on mixerA/B is the     │
+   │   safety margin. If `whitesnakePadPeakMonitor` reports clipping, │
+   │   drop `volume` or downstream gains further — do not raise the   │
+   │   pad back to unity.                                             │
+   └──────────────────────────────────────────────────────────────────┘
                         │
                         │  mono pad signal
                         │
@@ -81,22 +100,29 @@ the multiplicative factor applied at each mixer slot.
 
 For one active pad voice, the multiplicative chain to either DAC channel is:
 
-    voice → env → mixerA/B (×volume) → finalMixer (×1.0)
+    voice → voiceMixer (dry + sub + HP sum) → env
+         → mixerA/B (×volume × 0.9)
+         → finalMixer (×1.0)
          → mixerL6/R6 (×masterVolume × soundfontVolume)
          → sumL/R (×1.0) → DAC
 
 At default `volume=1.0`, `masterVolume=1.0`, `soundfontVolume=1.0` the
-effective gain per voice into the DAC is **1.0** (unity). The pad relies on
-the >12 dB of internal headroom in the source samples to prevent the eight-
-voice sum from clipping; ADSR envelopes and the asymmetric VS waveforms make
-in-phase peak summing rare in practice. If you ever do see clipping in the
-`whitesnakePadPeakMonitor`, drop `volume` (or master/mode gains) rather than
-re-introducing a per-voice attenuation.
+effective gain per dry voice into the DAC is **0.9** — the per-voice 0.9
+pad on mixerA/B is HP-overlay headroom (see the headroom note in the
+diagram). At hpMix=1.0 the voiceMixer sum is roughly `mainAmp * (1 + 1)` 
+before the sub, so the 0.9 pad still leaves comfortable margin. At hpMix=2.0
+the sum can approach `mainAmp * (1 + 2 + octaveMix)` per voice, and dense
+chords at full velocity + full master + full soundfont volume CAN clip.
+If you see clipping in the `whitesnakePadPeakMonitor`, drop `volume` or the
+downstream master/mode gains rather than relaxing the 0.9 pad.
 
 ## Code references
 
-- Per-voice sub-osc graph: `SoundfontPadSynthesizer.cpp` constructor
-  (`mainToVoiceMixer`/`subToVoiceMixer`/`voiceMixerToEnvelope`)
+- Per-voice sub-osc + HP graph: `SoundfontPadSynthesizer.cpp` constructor
+  (`mainToVoiceMixer`/`mainToHpFilter`/`hpFilterToVoiceMixer`/
+  `subToVoiceMixer`/`voiceMixerToEnvelope`)
+- Per-voice HP cutoff set: `SoundfontPadSynthesizer::noteOn` and
+  `setHighpassMultiplier` (recomputes for every sounding voice)
 - Per-voice mixer gains: `SoundfontPadSynthesizer::updateMixerGains` and
   `updateVoiceMixerGains`
 - L/R fanout and mode mixers: `HybridSynthesizer.h` — pad to `mixerL6/R6` slot 1,
@@ -149,6 +175,22 @@ the codebase (e.g. `CC_SoundfontSustain`, CC 23) refers to ADSR sustain
 prematurely reset the captured chord velocity when the player lifts all
 keys while holding the pedal. Same caveat for any future "all notes
 off" detection in the pad voice allocator.
+
+### Per-voice HP cutoff is pinned at noteOn
+`hpFilters[i].frequency(noteHz * hpMultiplier)` is called from `noteOn` using
+the just-pressed MIDI note. It does NOT retune during a held note. WHITESNAKE
+doesn't use pitch bend or modulation, so this is fine — if either gets added
+later, every sounding voice's filter would need to retune from the global
+bend value (the per-voice MIDI note is already kept in
+`voiceStates[i].midiNote`). `setHighpassMultiplier` already does this kind of
+fan-out for the CC 27 case.
+
+### Velocity smoother τ is fixed (no CC binding)
+`VelocitySmoother` still runs in WHITESNAKE — chord-pinned velocities flow
+through the EMA before reaching the pad. But the τ is no longer driven by
+a CC; it stays at the constructor default (~2.7 s, matching what CC 26 = 64
+used to set). CC 26 is now the velocity floor (formerly on CC 27); CC 27
+is the HP cutoff multiplier; CC 28 (PAD bank only) is the HP branch mix.
 
 ### `ChordVelocityCapture` is WHITESNAKE-only and gated by mode check
 The capture is enabled by `MIDIController::handleNoteOn/Off` checking

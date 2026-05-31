@@ -57,6 +57,17 @@ public:
     void setVelocityFloor(float floor);
     float getVelocityFloor() const { return velocityFloor; }
 
+    // Highpass branch on the main signal. Cutoff = noteHz * hpMultiplier,
+    // set at each voice's noteOn and re-pushed to sounding voices when the
+    // multiplier changes. Range [1.0, 4.0]. Default 3.1 (matches CC 27 = 89).
+    void setHighpassMultiplier(float m);
+    float getHighpassMultiplier() const { return hpMultiplier; }
+
+    // Mix level of the highpassed branch into the voice mixer. Range [0.0, 2.0].
+    // Default 1.0 (HP branch summed at unity with the dry main).
+    void setHighpassMix(float m);
+    float getHighpassMix() const { return hpMix; }
+
     // Live expression multiplier (0..1, default 1.0) applied on top of the
     // per-chord velocity amplitude to every sounding voice. Intended for the
     // expression pedal / aftertouch swell. Updates currently-playing voices.
@@ -74,7 +85,8 @@ public:
 private:
     AudioSynthWavetable mainVoices[NUM_VOICES];
     AudioSynthWavetable subVoices[NUM_VOICES];
-    AudioMixer4 voiceMixers[NUM_VOICES];      // ch0=main, ch1=sub, ch2/3 unused
+    AudioFilterStateVariable hpFilters[NUM_VOICES]; // 12 dB/oct HP per voice on main
+    AudioMixer4 voiceMixers[NUM_VOICES];      // ch0=main dry, ch1=sub, ch2=main HP, ch3 unused
     AudioEffectEnvelope envelopes[NUM_VOICES];
 
     // 8 voices -> 2 stage-1 mixers (4 inputs each) -> 1 final mixer (2 of 4 used)
@@ -83,6 +95,8 @@ private:
     AudioMixer4 finalMixer;   // mixerA + mixerB
 
     AudioConnection* mainToVoiceMixer[NUM_VOICES];
+    AudioConnection* mainToHpFilter[NUM_VOICES];
+    AudioConnection* hpFilterToVoiceMixer[NUM_VOICES];
     AudioConnection* subToVoiceMixer[NUM_VOICES];
     AudioConnection* voiceMixerToEnvelope[NUM_VOICES];
     AudioConnection* envelopeToMixer[NUM_VOICES];
@@ -105,6 +119,8 @@ private:
     float sustainLevel;
     float releaseMs;
     float velocityFloor;
+    float hpMultiplier;
+    float hpMix;
 
     // Per-voice amplitude (square-law curve of the smoothed velocity) captured
     // at each voice's noteOn, and a global live expression multiplier. Per-voice
