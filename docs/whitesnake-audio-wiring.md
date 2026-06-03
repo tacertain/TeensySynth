@@ -24,12 +24,18 @@ the multiplicative factor applied at each mixer slot.
    │                          cutoff = noteHz             * hpMix     │
    │                                 * hpMultiplier      (CC 28,      │
    │                          (CC 27, 1.0x–4.0x,          0.0–2.0,    │
-   │                           default 3.1x)              default 1.0)│
+   │                           default 3.1x;              default     │
+   │                           CC 27 = 89)                ~0.94;      │
+   │                                                      CC 28 = 60) │
    │                                                                  │
    │       subVoices[i]  ────────────────────────► voiceMixers[i].1   │
    │         plays note N−12                       gain = mainAmp     │
    │         (skipped if N<12)                            * octaveMix │
-   │                                                     (CC 25)      │
+   │                                                     (CC 25,      │
+   │                                                      0.0–1.0,    │
+   │                                                      default     │
+   │                                                      ~0.75;      │
+   │                                                      CC 25 = 95) │
    │                                                                  │
    │                          voiceMixers[i] ──► envelopes[i] ──►     │
    │                                                                  │
@@ -37,9 +43,7 @@ the multiplicative factor applied at each mixer slot.
    │   velocity curve captured at noteOn; `expression` is the live    │
    │   swell scalar). Voices 0–3 sum into mixerA, 4–7 into mixerB,    │
    │   both into finalMixer; per-voice slot gains on mixerA/B =       │
-   │   `volume * 0.9` (volume defaults to 1.0; the 0.9 is a HP-       │
-   │   overlay safety pad — see headroom note below). finalMixer      │
-   │   slots [0]=[1]=1.0.                                             │
+   │   `volume`. finalMixer slots [0]=[1]=1.0.                        │
    │                                                                  │
    │       v0──►envA[0]──┐                                            │
    │       v1──►envA[1]──┤──►mixerA──┐                                │
@@ -50,15 +54,15 @@ the multiplicative factor applied at each mixer slot.
    │       v6──►envA[6]──┤                                            │
    │       v7──►envA[7]──┘                                            │
    │                                                                  │
-   │   The Whitesnake VS samples carry >12 dB of internal headroom,   │
-   │   which used to make per-voice unity safe. With the HP overlay   │
-   │   live, a single voice can now sum main + 2×HP + sub against     │
-   │   the same headroom budget (at hpMix=2.0, octaveMix=1.0, full    │
-   │   velocity), which CAN clip on dense chords at full master +     │
-   │   soundfont volume. The per-voice 0.9 pad on mixerA/B is the     │
-   │   safety margin. If `whitesnakePadPeakMonitor` reports clipping, │
-   │   drop `volume` or downstream gains further — do not raise the   │
-   │   pad back to unity.                                             │
+   │   The per-voice `volume` on mixerA/B is the ONLY mode-specific   │
+   │   compensation in the chain — it absorbs both the VS-sample      │
+   │   headroom (samples are deliberately quiet) and the multi-voice  │
+   │   + HP-overlay + sub-octave sum (a voice at hpMix=2.0,           │
+   │   octaveMix=1.0, full velocity can hit ~mainAmp * (1 + 2 + 1)    │
+   │   into the voiceMixer). Downstream `soundfontVolume` and         │
+   │   `masterVolume` stay at their user-driven values. Tune `volume` │
+   │   to whatever leaves the `whitesnakePadPeakMonitor` clean at the │
+   │   loudest realistic chord; don't reintroduce a downstream scalar.│
    └──────────────────────────────────────────────────────────────────┘
                         │
                         │  mono pad signal
@@ -101,20 +105,20 @@ the multiplicative factor applied at each mixer slot.
 For one active pad voice, the multiplicative chain to either DAC channel is:
 
     voice → voiceMixer (dry + sub + HP sum) → env
-         → mixerA/B (×volume × 0.9)
+         → mixerA/B (×volume)
          → finalMixer (×1.0)
          → mixerL6/R6 (×masterVolume × soundfontVolume)
          → sumL/R (×1.0) → DAC
 
-At default `volume=1.0`, `masterVolume=1.0`, `soundfontVolume=1.0` the
-effective gain per dry voice into the DAC is **0.9** — the per-voice 0.9
-pad on mixerA/B is HP-overlay headroom (see the headroom note in the
-diagram). At hpMix=1.0 the voiceMixer sum is roughly `mainAmp * (1 + 1)` 
-before the sub, so the 0.9 pad still leaves comfortable margin. At hpMix=2.0
-the sum can approach `mainAmp * (1 + 2 + octaveMix)` per voice, and dense
-chords at full velocity + full master + full soundfont volume CAN clip.
-If you see clipping in the `whitesnakePadPeakMonitor`, drop `volume` or the
-downstream master/mode gains rather than relaxing the 0.9 pad.
+`volume` is the only place WHITESNAKE compensates for sample headroom +
+multi-voice sum; everything downstream is user-driven. At default
+`masterVolume=1.0` and `soundfontVolume=1.0`, the effective gain per dry
+voice is `volume`. The voiceMixer sum a single voice can present to the
+envelope is roughly `mainAmp * (1 + hpMix + octaveMix)` (dry + HP + sub) —
+at the boot defaults (hpMix≈0.94, octaveMix≈0.75) that's ~2.7×, and at
+the CC ceilings (hpMix=2.0, octaveMix=1.0) it climbs to ~4.0×. Tune
+`volume` so the loudest realistic chord stays below clip on the
+`whitesnakePadPeakMonitor`, and leave the downstream gains alone.
 
 ## Code references
 

@@ -306,8 +306,12 @@ void CC_ModeWhitesnake(MIDIController* controller, byte channel, byte control, b
         Serial.println(" triggered - Switching to WHITESNAKE mode");
         controller->getSynth().setSynthMode(HybridSynthesizer::WHITESNAKE);
         installBank2ForWhitesnakePad(controller);
-        controller->getSynth().setSoundfontVolume(3.0f);
-        controller->getSynth().getWhitesnakePad().setOctaveMix(1.0f / 3.0f);
+        // No state reset here: soundfont volume, pad CC params (octave mix,
+        // velocity floor, HP mix, HP multiplier), and master volume all
+        // persist from wherever the user left them. Boot defaults live in
+        // SoundfontPadSynthesizer's constructor and the HybridSynthesizer
+        // setup. Headroom for the VS samples + multi-voice sum is meant to
+        // be absorbed at the pad's per-voice mixerA/B volume.
         controller->getSynth().loadWhitesnakeInstruments();
     }
 }

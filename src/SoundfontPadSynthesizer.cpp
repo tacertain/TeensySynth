@@ -3,15 +3,15 @@
 
 SoundfontPadSynthesizer::SoundfontPadSynthesizer()
     : instrumentData(nullptr)
-    , volume(1.0f)
-    , octaveMix(1.0f / 3.0f)
+    , volume(2.0f)  // single WHITESNAKE compensation: VS-sample headroom + multi-voice sum
+    , octaveMix(95.0f / 127.0f)   // matches WHITESNAKE default CC 25 = 95
     , attackMs(5.0f)
     , decayMs(0.0f)
     , sustainLevel(1.0f)
     , releaseMs(800.0f)
-    , velocityFloor(0.25f)
-    , hpMultiplier(3.1f)
-    , hpMix(1.0f)
+    , velocityFloor(50.0f / 127.0f)         // matches WHITESNAKE default CC 26 = 50
+    , hpMultiplier(3.1f)                    // matches WHITESNAKE default CC 27 = 89
+    , hpMix(60.0f * 2.0f / 127.0f)          // matches WHITESNAKE default CC 28 = 60
     , expression(1.0f)
 {
     for (int i = 0; i < NUM_VOICES; ++i) {
@@ -313,17 +313,16 @@ int SoundfontPadSynthesizer::findOldestVoice() {
 }
 
 void SoundfontPadSynthesizer::updateMixerGains() {
-    // Whitesnake VS samples already have >12 dB of internal headroom, so the
-    // usual per-voice 0.25 attenuation isn't needed. A 0.9 pad is applied per
-    // voice as a safety margin: the HP overlay branch (voiceMixers slot 2) can
-    // push up to hpMix = 2.0, which at full velocity + hpMix=2 + octaveMix=1
-    // sums roughly main + 2*HP + sub against the same sample headroom and
-    // CAN clip at full master + soundfont volume on dense chords. Drop volume
-    // (or master/mode gains) further if the whitesnakePadPeakMonitor reports
-    // clipping; do not raise the per-voice pad back to unity.
+    // Single compensation point for both VS-sample headroom and multi-voice
+    // sum: the per-voice gain on mixerA/B. Downstream (soundfontVolume,
+    // masterVolume) is left at user-driven values; nothing else in the chain
+    // applies a mode-specific scalar. Tune `volume` to the headroom budget
+    // (HP overlay branch up to hpMix=2.0, sub up to octaveMix=1.0, full
+    // velocity) -- if the whitesnakePadPeakMonitor clips, drop volume here
+    // rather than reintroducing scalars downstream.
     for (int i = 0; i < 4; ++i) {
-        mixerA.gain(i, volume * 0.9f);
-        mixerB.gain(i, volume * 0.9f);
+        mixerA.gain(i, volume);
+        mixerB.gain(i, volume);
     }
     finalMixer.gain(0, 1.0f);
     finalMixer.gain(1, 1.0f);

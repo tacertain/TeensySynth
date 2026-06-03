@@ -78,8 +78,8 @@ The synthesizer has multiple synthesis modes:
 
   While any captured note is still held, subsequent notes fire immediately at the pinned velocity.
 - **Velocity smoothing**: chord-pinned velocities feed a continuous-time EMA with a fixed τ ≈ 2.7 s. The pad plays each chord at the smoothed value, not the raw chord velocity, so the macro arc of a song (e.g. intro → chorus build) is decoupled from per-chord velocity variation. Held notes added to an already-fired chord match the smoothed level. Long pauses naturally reset the smoother (α → 1 on the next chord).
-- **Velocity floor (dB range)**: CC 26 sets the pre-square floor of the velocity curve (0.0 = full dynamic range, 1.0 = flat). Default 0.25 → amp floor 0.0625 → 24 dB. Higher values compress the dynamic range; lower values open it up.
-- **Highpass split on main**: each voice's main signal is split into a dry path and a parallel highpass branch, summed at the voice mixer (sub-octave is untouched). HP cutoff = noteHz × multiplier, set per voice at noteOn. CC 27 sets the multiplier (1.0×–4.0×, default 3.1×); CC 28 sets the HP branch mix (0.0–2.0, default 1.0 = HP at unity with dry).
+- **Velocity floor (dB range)**: CC 26 sets the pre-square floor of the velocity curve (0.0 = full dynamic range, 1.0 = flat). Default ~0.39 (CC 26 = 50) → amp floor ~0.155 → ~16 dB. Higher values compress the dynamic range; lower values open it up.
+- **Highpass split on main**: each voice's main signal is split into a dry path and a parallel highpass branch, summed at the voice mixer (sub-octave is untouched). HP cutoff = noteHz × multiplier, set per voice at noteOn. CC 27 sets the multiplier (1.0×–4.0×, default 3.1×); CC 28 sets the HP branch mix (0.0–2.0, default ~0.94 at CC 28 = 60).
 - CC 21-28 control pad parameters live (see Soundfont Synthesizer Controls).
 
 ## Control Methods
@@ -134,10 +134,10 @@ CC 21-24 are shared across all four soundfont modes. CC 25-28 differ by mode and
 - **CC 28**: Soundfont/Pad Volume (0-127) — linear, value × (4/128). **32 = unity**, 127 ≈ 4× boost. Shares the downstream mixer gain with the Whitesnake pad path (but is not bound in WHITESNAKE — see below).
 
 ##### WHITESNAKE
-- **CC 25**: Sub-Octave Mix (0-127) — linear, 0.0 (no sub) – 1.0 (sub at unity with main)
-- **CC 26**: Velocity Floor (0-127) — linear 0.0 – 1.0, pre-square floor of the velocity curve. Default at CC 26 ≈ 32 → 0.25 → amp floor 0.0625 → **24 dB** range. Higher values compress range (e.g. 64 → 12 dB, 127 → flat); lower values expand it.
+- **CC 25**: Sub-Octave Mix (0-127) — linear, 0.0 (no sub) – 1.0 (sub at unity with main). Default at CC 25 = 95 (~0.75).
+- **CC 26**: Velocity Floor (0-127) — linear 0.0 – 1.0, pre-square floor of the velocity curve. Default at CC 26 = 50 (~0.39) → amp floor ~0.155 → **~16 dB** range. Higher values compress range (e.g. 64 → 12 dB, 127 → flat); lower values expand it.
 - **CC 27**: Highpass Multiplier (0-127) — linear 1.0× – 4.0× of note frequency. Per-voice HP cutoff = noteHz × multiplier, pinned at noteOn. Default at CC 27 = 89 (~3.1×).
-- **CC 28**: Highpass Mix (0-127) — linear 0.0 – 2.0, gain on the HP branch summed with the dry main at the voice mixer. Default at CC 28 = 64 (~1.0, HP at unity with dry). Note: CC 28 is the HP mix in WHITESNAKE; the soundfont/pad volume control is not exposed in this mode — use CC 7 master volume instead.
+- **CC 28**: Highpass Mix (0-127) — linear 0.0 – 2.0, gain on the HP branch summed with the dry main at the voice mixer. Default at CC 28 = 60 (~0.94). Note: CC 28 is the HP mix in WHITESNAKE; the soundfont/pad volume control is not exposed in this mode — use CC 7 master volume instead.
 
 The WHITESNAKE velocity smoother runs at a fixed τ ≈ 2.7 s (no CC binding).
 
@@ -194,7 +194,7 @@ The WHITESNAKE velocity smoother runs at a fixed τ ≈ 2.7 s (no CC binding).
 
 ### Velocity Response
 - **Input curve** (all modes): a plain linear normalization — float velocity = `MIDI byte / 128`. No clipping, no compensation.
-- **Whitesnake pad output curve**: a square-law amplitude curve, aligned with the `/128` input shaper. Raw MIDI velocity ≤ 20 floors at amp = `floor²`; ≥ 100 ceilings at amp = 1.0; between, amp = `(floor + (1−floor)·t)²` where t = (v − 20/128) / (80/128). The `floor` is set by CC 26 (default 0.25 → amp floor 0.0625 → 24 dB range). The squared ramp gives a perceptually natural response with a positive second derivative (concave up). The amp is then quantized to a 0-127 MIDI byte before being passed to the wavetable.
+- **Whitesnake pad output curve**: a square-law amplitude curve, aligned with the `/128` input shaper. Raw MIDI velocity ≤ 20 floors at amp = `floor²`; ≥ 100 ceilings at amp = 1.0; between, amp = `(floor + (1−floor)·t)²` where t = (v − 20/128) / (80/128). The `floor` is set by CC 26 (default ~0.39 at CC 26 = 50 → amp floor ~0.155 → ~16 dB range). The squared ramp gives a perceptually natural response with a positive second derivative (concave up). The amp is then quantized to a 0-127 MIDI byte before being passed to the wavetable.
 - **Whitesnake velocity smoothing**: upstream of the curve, chord-pinned velocities pass through a continuous-time EMA at a fixed τ ≈ 2.7 s. The smoothed value drives every note in the chord, so per-chord variation is absorbed and the macro arc of a song builds across multiple chords rather than within one.
 
 ### String Pad Polyphonic Behavior
