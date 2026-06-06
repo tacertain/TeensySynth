@@ -164,6 +164,60 @@ void CC_WhitesnakePadHighpassMix(MIDIController* controller, byte channel, byte 
     Serial.printf("Whitesnake HP Mix: %.3f (CC %d = %d)\n", mix, control, value);
 }
 
+void CC_WhitesnakeFilterLfoRate(MIDIController* controller, byte channel, byte control, byte value) {
+    // Exponential 0.05..1.5 Hz (ratio 30).
+    float hz = 0.05f * pow(30.0f, (float)value / 127.0f);
+    controller->getSynth().getWhitesnakePad().setPadLpLfoRate(hz);
+    Serial.printf("Whitesnake LP LFO Rate: %.3f Hz (CC %d = %d)\n", hz, control, value);
+}
+
+void CC_WhitesnakeFilterLfoDepth(MIDIController* controller, byte channel, byte control, byte value) {
+    // Linear 0..127 -> 0..1.0. 0 = static filter, 1 = full ±octaveControl swing.
+    float depth = (float)value / 127.0f;
+    controller->getSynth().getWhitesnakePad().setPadLpLfoDepth(depth);
+    Serial.printf("Whitesnake LP LFO Depth: %.3f (CC %d = %d)\n", depth, control, value);
+}
+
+void CC_WhitesnakeFilterCutoff(MIDIController* controller, byte channel, byte control, byte value) {
+    // Exponential 1.0..20.0× note frequency (ratio 20). Default 6× at value ~98.
+    float m = 1.0f * pow(20.0f, (float)value / 127.0f);
+    controller->getSynth().getWhitesnakePad().setPadLpMultiplier(m);
+    Serial.printf("Whitesnake LP Cutoff: %.2fx note (CC %d = %d)\n", m, control, value);
+}
+
+void CC_WhitesnakeFilterResonance(MIDIController* controller, byte channel, byte control, byte value) {
+    // Linear 0..127 -> 0.7..4.0. Watch self-oscillation above ~3.5.
+    float q = 0.7f + (float)value * (3.3f / 127.0f);
+    controller->getSynth().getWhitesnakePad().setPadLpResonance(q);
+    Serial.printf("Whitesnake LP Q: %.2f (CC %d = %d)\n", q, control, value);
+}
+
+void CC_WhitesnakeChorusMix(MIDIController* controller, byte channel, byte control, byte value) {
+    float mix = (float)value / 127.0f;
+    controller->getSynth().getWhitesnakePad().setChorusMix(mix);
+    Serial.printf("Whitesnake Chorus Mix: %.3f (CC %d = %d)\n", mix, control, value);
+}
+
+void CC_WhitesnakeChorusDepth(MIDIController* controller, byte channel, byte control, byte value) {
+    // Linear 0..127 -> 0..1 fraction. 0.5 = default depths (132/176 samples).
+    // Re-inits both flanges -> audible click on each message; not for sweeps.
+    float fraction = (float)value / 127.0f;
+    controller->getSynth().getWhitesnakePad().setChorusDepth(fraction);
+    Serial.printf("Whitesnake Chorus Depth: %.3f (CC %d = %d)\n", fraction, control, value);
+}
+
+void CC_WhitesnakeReverbMix(MIDIController* controller, byte channel, byte control, byte value) {
+    float mix = (float)value / 127.0f;
+    controller->getSynth().getWhitesnakePad().setReverbMix(mix);
+    Serial.printf("Whitesnake Reverb Mix: %.3f (CC %d = %d)\n", mix, control, value);
+}
+
+void CC_WhitesnakeReverbSize(MIDIController* controller, byte channel, byte control, byte value) {
+    float size = (float)value / 127.0f;
+    controller->getSynth().getWhitesnakePad().setReverbRoomSize(size);
+    Serial.printf("Whitesnake Reverb Size: %.3f (CC %d = %d)\n", size, control, value);
+}
+
 void CC_StringPadVolume(MIDIController* controller, byte channel, byte control, byte value) {
     controller->getSynth().setStringPadVolume((float)value / 127.0f);
     Serial.printf("String pad volume: %.2f\n", (float)value / 127.0f);
@@ -439,6 +493,24 @@ const MIDIControllerChannelCallback channel1Bank_41_50[] = {
 };
 const size_t channel1Bank_41_50_count = sizeof(channel1Bank_41_50) / sizeof(channel1Bank_41_50[0]);
 
+// Bank 4 (alternate): CC 40-49 - Whitesnake pad FX (path B chain)
+// Pair structure: low CC = baseline/amount, high CC = modulation/character.
+// 41/42 = LP base cutoff multiplier / resonance (always-on static character)
+// 43/44 = per-voice LP filter LFO depth / rate (free-running, decorrelated per voice)
+// 45/46 = chorus wet level / chorus depth (depth re-inits flanges — clicks on change)
+// 47/48 = reverb wet level / reverb roomsize
+const MIDIControllerChannelCallback channel1Bank_41_50_PAD[] = {
+    { 41, CC_WhitesnakeFilterCutoff },
+    { 42, CC_WhitesnakeFilterResonance },
+    { 43, CC_WhitesnakeFilterLfoDepth },
+    { 44, CC_WhitesnakeFilterLfoRate },
+    { 45, CC_WhitesnakeChorusMix },
+    { 46, CC_WhitesnakeChorusDepth },
+    { 47, CC_WhitesnakeReverbMix },
+    { 48, CC_WhitesnakeReverbSize },
+};
+const size_t channel1Bank_41_50_PAD_count = sizeof(channel1Bank_41_50_PAD) / sizeof(channel1Bank_41_50_PAD[0]);
+
 // Bank 5: CC 50-59 - Mode switching controls
 const MIDIControllerChannelCallback channel1Bank_51_60[] = {
     { 51, CC_ModePluckedStrings },
@@ -480,7 +552,7 @@ static const ModeBankConfig modeBankConfigs[] = {
     { HybridSynthesizer::IRAN,            channel1Bank_21_30,     channel1Bank_21_30_count,     channel1Bank_41_50, channel1Bank_41_50_count },
     { HybridSynthesizer::TUSK,            channel1Bank_21_30_SF,  channel1Bank_21_30_SF_count,  channel1Bank_41_50, channel1Bank_41_50_count },
     { HybridSynthesizer::TUSK_CHORD,      channel1Bank_21_30_SF,  channel1Bank_21_30_SF_count,  channel1Bank_41_50, channel1Bank_41_50_count },
-    { HybridSynthesizer::WHITESNAKE,      channel1Bank_21_30_PAD, channel1Bank_21_30_PAD_count, channel1Bank_41_50, channel1Bank_41_50_count },
+    { HybridSynthesizer::WHITESNAKE,      channel1Bank_21_30_PAD, channel1Bank_21_30_PAD_count, channel1Bank_41_50_PAD, channel1Bank_41_50_PAD_count },
 };
 
 void installBanksForMode(MIDIController* controller, HybridSynthesizer::SynthMode mode) {

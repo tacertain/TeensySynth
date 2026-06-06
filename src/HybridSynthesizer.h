@@ -366,6 +366,18 @@ public:
         whitesnakePad.setDecay(0.0f);
         whitesnakePad.setSustain(1.0f);
         whitesnakePad.setRelease(800.0f);
+
+        // Path B FX defaults: per-voice LP+LFO, chorus, reverb. Re-push on every
+        // mode (re)entry so the WHITESNAKE FX chain has a known starting state
+        // even if the user tweaked CCs and switched modes.
+        whitesnakePad.setPadLpMultiplier(6.0f);
+        whitesnakePad.setPadLpResonance(0.9f);
+        whitesnakePad.setPadLpLfoRate(0.20f);
+        whitesnakePad.setPadLpLfoDepth(0.5f);
+        whitesnakePad.setChorusMix(55.0f / 127.0f);          // CC 45 = 55
+        whitesnakePad.setChorusDepth(72.0f / 127.0f);        // CC 46 = 72
+        whitesnakePad.setReverbMix(75.0f / 127.0f);          // CC 47 = 75
+        whitesnakePad.setReverbRoomSize(75.0f / 127.0f);     // CC 48 = 75
     }
 
     // TUSK_CHORD helper methods

@@ -46,6 +46,16 @@ void CC_WhitesnakePadVelocityFloor(MIDIController* controller, byte channel, byt
 void CC_WhitesnakePadHighpassMultiplier(MIDIController* controller, byte channel, byte control, byte value);
 void CC_WhitesnakePadHighpassMix(MIDIController* controller, byte channel, byte control, byte value);
 
+// Whitesnake bank-4 pad FX controls (per-voice LP+LFO, chorus, reverb)
+void CC_WhitesnakeFilterLfoRate(MIDIController* controller, byte channel, byte control, byte value);
+void CC_WhitesnakeFilterLfoDepth(MIDIController* controller, byte channel, byte control, byte value);
+void CC_WhitesnakeFilterCutoff(MIDIController* controller, byte channel, byte control, byte value);
+void CC_WhitesnakeFilterResonance(MIDIController* controller, byte channel, byte control, byte value);
+void CC_WhitesnakeChorusMix(MIDIController* controller, byte channel, byte control, byte value);
+void CC_WhitesnakeChorusDepth(MIDIController* controller, byte channel, byte control, byte value);
+void CC_WhitesnakeReverbMix(MIDIController* controller, byte channel, byte control, byte value);
+void CC_WhitesnakeReverbSize(MIDIController* controller, byte channel, byte control, byte value);
+
 // String pad controls
 void CC_StringPadVolume(MIDIController* controller, byte channel, byte control, byte value);
 void CC_StringPadFilterCutoff(MIDIController* controller, byte channel, byte control, byte value);
@@ -96,6 +106,10 @@ extern const size_t channel1Bank_31_40_count;
 // Bank 4: CC 40-49 - String pad controls
 extern const MIDIControllerChannelCallback channel1Bank_41_50[];
 extern const size_t channel1Bank_41_50_count;
+
+// Bank 4 (alternate): CC 40-49 - Whitesnake pad FX (LP filter + LFO + chorus + reverb)
+extern const MIDIControllerChannelCallback channel1Bank_41_50_PAD[];
+extern const size_t channel1Bank_41_50_PAD_count;
 
 // Bank 5: CC 50-59 - Mode switching controls
 extern const MIDIControllerChannelCallback channel1Bank_51_60[];

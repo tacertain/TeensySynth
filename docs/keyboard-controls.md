@@ -156,6 +156,30 @@ The WHITESNAKE velocity smoother runs at a fixed τ ≈ 2.7 s (no CC binding).
   - **Value 127**: Multiplier = 4.0 (aggressive high-pass, tighter sound)
   - **Uses exponential mapping** for smooth control across the range
 
+> **Note:** CC 41-48 are dual-purpose. The mappings above apply in non-WHITESNAKE modes. In WHITESNAKE mode, CC 41-48 reroute to the path-B pad FX chain documented below.
+
+#### WHITESNAKE Pad FX Controls (Channel 1) — bank 4, active only in WHITESNAKE mode
+
+Pair structure: low CC in each pair = baseline/amount, high CC = modulation/character.
+
+**LP filter (always inline):**
+- **CC 41**: LP Cutoff Multiplier (0-127) — exponential, 1.0× – 20.0× of note frequency. Clamped internally to 8 kHz to keep the Chamberlin SVF stable. Default 6× (CC 41 ≈ 76).
+- **CC 42**: LP Resonance (Q) (0-127) — linear, 0.7 – 4.0. Default Q = 0.9 (CC 42 ≈ 8). Above ~3.5 risks self-oscillation.
+
+**LP filter modulation (per-voice free-running sine, randomized phase per voice):**
+- **CC 43**: LP LFO Depth (0-127) — linear, 0.0 – 1.0. 0 = filter static; 1 = full ±octaveControl swing. Default 0.5 (CC 43 ≈ 64).
+- **CC 44**: LP LFO Rate (0-127) — exponential, 0.05 – 1.5 Hz. Default 0.20 Hz (CC 44 ≈ 52).
+
+**Chorus (two parallel `AudioEffectFlange` instances, dry-cancelled at the chorus bus):**
+- **CC 45**: Chorus Wet Mix (0-127) — linear, 0.0 – 1.0. Default 0.433 (CC 45 = 55).
+- **CC 46**: Chorus Depth (0-127) — linear, 0.0 – 1.0 fraction. 0.5 = default flange depths (132/176 samples). Re-inits both flanges on every change — **clicks audibly on slider sweeps**. Intended as a set-once sound-design knob, not a live performance control. Default 0.567 (CC 46 = 72).
+
+**Reverb (`AudioEffectFreeverb`, fed from dry + chorus pre-reverb sum):**
+- **CC 47**: Reverb Wet Mix (0-127) — linear, 0.0 – 1.0. Default 0.591 (CC 47 = 75).
+- **CC 48**: Reverb Room Size (0-127) — linear, 0.0 – 1.0 → `Freeverb::roomsize()`. Default 0.591 (CC 48 = 75).
+
+See `docs/prophet-vs/path-b-tuning-guide.md` for the exploration workflow.
+
 #### Mode and Chord Controls (Channel 1)
 - **CC 59** (value 127): Cycle **String Pad Chord Mode**:
   - **First press**: Major Chord Mode (6-note major chords: root + 3rd + 5th across two octaves)

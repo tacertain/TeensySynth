@@ -11,13 +11,29 @@
  * wavetable (plays one octave down), summed by a per-voice mixer:
  *
  *     mainWT --gain(0)=1.0----+
- *                              +--> voiceMixer --> envelope --> stage-1 mixer
- *     subWT  --gain(1)=mix----+
+ *                              +--> voiceMixer --> lpfVoice --> envelope --> stage-1 mixer
+ *     subWT  --gain(1)=mix----+        ^
+ *                                       | (octave-control mod input)
+ *                              free-running per-voice sine LFO
  *
  * The sub gain is set via setOctaveMix() (CC 25 in WHITESNAKE) and takes
  * effect live on currently-sounding voices.
  *
- * 8 voices for note overlap during long releases. No filter, no crossfade.
+ * 8 voices for note overlap during long releases.
+ *
+ * Path B post-FX (mono, sits after finalMixer):
+ *
+ *     finalMixer -+----------> wetDryMixer.0 (dry, fixed 1.0)
+ *                 |
+ *                 +--> chorusA -+
+ *                 |             +--> chorusBus -+--> wetDryMixer.1 (chorus wet)
+ *                 +--> chorusB -+               |
+ *                 |                             +--+
+ *                 +------------> preReverbMixer.0  |
+ *                                preReverbMixer.1 <+
+ *                                       |
+ *                                       v
+ *                                 reverbPost (Freeverb) --> wetDryMixer.2 (reverb wet)
  *
  * Does NOT load SF2 files itself — borrows an instrument_data pointer from
  * SoundfontSynthesizer so that the heavy reader machinery (PSRAM allocation,
@@ -27,6 +43,10 @@
 class SoundfontPadSynthesizer {
 public:
     static const int NUM_VOICES = 8;
+
+    // 2048 samples (~46 ms @ 44.1 kHz). Comfortable headroom above the 30 ms
+    // max offset+depth this class spec's for the chorus flanges.
+    static const int CHORUS_BUF_LEN = 2048;
 
     SoundfontPadSynthesizer();
     ~SoundfontPadSynthesizer();
@@ -80,6 +100,48 @@ public:
     // track the evolving level.
     void setHeldLevel(float velocity);
 
+    // ----- Path B: per-voice LP filter + free-running LFO -----
+    // Base LP cutoff = noteHz * lpMultiplier, set at each voice's noteOn and
+    // re-pushed to sounding voices when the multiplier changes. The per-voice
+    // LFO modulates the cutoff via the filter's frequency-mod input, scaled
+    // by octaveControl (built-in constant 0.6 octaves).
+    void setPadLpMultiplier(float m);
+    float getPadLpMultiplier() const { return lpMultiplier; }
+
+    // LP filter Q, applied to every voice's lpfVoice. Range [0.7, 4.0].
+    void setPadLpResonance(float q);
+    float getPadLpResonance() const { return lpResonance; }
+
+    // Per-voice LFO rate (Hz). Same rate on all voices; per-voice phase stays
+    // randomized at construction so chords decorrelate.
+    void setPadLpLfoRate(float hz);
+    float getPadLpLfoRate() const { return lpLfoRateHz; }
+
+    // Per-voice LFO amplitude. 0 = filter is static; 1 = full ±octaveControl swing.
+    void setPadLpLfoDepth(float depth);
+    float getPadLpLfoDepth() const { return lpLfoDepth; }
+
+    // ----- Path B: post-mix chorus + reverb chain -----
+    // Wet level of the chorus bus into wetDryMixer. Range [0.0, 1.0].
+    void setChorusMix(float m);
+    float getChorusMix() const { return chorusMix; }
+
+    // Single fraction in [0.0, 1.0] that scales both flanges' delay_depth
+    // around their defaults (fraction 0.5 ≈ default 132/176 samples; 1.0 ≈ 264/352).
+    // Re-inits both flanges via voices(); resets their LFO phase and the
+    // circular buffer index, so expect a click on each call. Acceptable for
+    // sound-design tweaking, not for live sweeps.
+    void setChorusDepth(float fraction);
+    float getChorusDepth() const { return chorusDepthFraction; }
+
+    // Wet level of the Freeverb tap into wetDryMixer. Range [0.0, 1.0].
+    void setReverbMix(float m);
+    float getReverbMix() const { return reverbMix; }
+
+    // Freeverb roomsize. Range [0.0, 1.0].
+    void setReverbRoomSize(float s);
+    float getReverbRoomSize() const { return reverbRoomSize; }
+
     AudioStream* getOutput();
 
 private:
@@ -87,6 +149,8 @@ private:
     AudioSynthWavetable subVoices[NUM_VOICES];
     AudioFilterStateVariable hpFilters[NUM_VOICES]; // 12 dB/oct HP per voice on main
     AudioMixer4 voiceMixers[NUM_VOICES];      // ch0=main dry, ch1=sub, ch2=main HP, ch3 unused
+    AudioFilterStateVariable lpfVoice[NUM_VOICES];  // post-mix per-voice LP with LFO mod
+    AudioSynthWaveform lfoVoice[NUM_VOICES];        // free-running sine, randomized phase per voice
     AudioEffectEnvelope envelopes[NUM_VOICES];
 
     // 8 voices -> 2 stage-1 mixers (4 inputs each) -> 1 final mixer (2 of 4 used)
@@ -94,14 +158,39 @@ private:
     AudioMixer4 mixerB;       // voices 4-7
     AudioMixer4 finalMixer;   // mixerA + mixerB
 
+    // Path B post-FX
+    AudioEffectFlange chorusA;
+    AudioEffectFlange chorusB;
+    AudioMixer4 chorusBus;          // sums chorusA + chorusB
+    AudioMixer4 preReverbMixer;     // sums dry + chorus into reverb input
+    AudioEffectFreeverb reverbPost;
+    AudioMixer4 wetDryMixer;        // ch0=dry, ch1=chorus wet, ch2=reverb wet
+    short chorusBufA[CHORUS_BUF_LEN];
+    short chorusBufB[CHORUS_BUF_LEN];
+
     AudioConnection* mainToVoiceMixer[NUM_VOICES];
     AudioConnection* mainToHpFilter[NUM_VOICES];
     AudioConnection* hpFilterToVoiceMixer[NUM_VOICES];
     AudioConnection* subToVoiceMixer[NUM_VOICES];
-    AudioConnection* voiceMixerToEnvelope[NUM_VOICES];
+    AudioConnection* voiceMixerToLpf[NUM_VOICES];  // (was voiceMixerToEnvelope)
+    AudioConnection* lfoToLpf[NUM_VOICES];
+    AudioConnection* lpfToEnvelope[NUM_VOICES];
     AudioConnection* envelopeToMixer[NUM_VOICES];
     AudioConnection* mixerAToFinal;
     AudioConnection* mixerBToFinal;
+
+    // Post-FX cords
+    AudioConnection* finalToDry;
+    AudioConnection* finalToChorusA;
+    AudioConnection* finalToChorusB;
+    AudioConnection* chorusAToBus;
+    AudioConnection* chorusBToBus;
+    AudioConnection* finalToChorusBusDryCancel;  // -dry, cancels AudioEffectFlange's 50% dry bleed
+    AudioConnection* chorusBusToWetDry;
+    AudioConnection* finalToPreReverb;
+    AudioConnection* chorusBusToPreReverb;
+    AudioConnection* preReverbToReverb;
+    AudioConnection* reverbToWetDry;
 
     AudioSynthWavetable::instrument_data* instrumentData;  // borrowed, NOT owned
 
@@ -122,6 +211,16 @@ private:
     float hpMultiplier;
     float hpMix;
 
+    // Path B state
+    float lpMultiplier;
+    float lpResonance;
+    float lpLfoRateHz;
+    float lpLfoDepth;
+    float chorusMix;
+    float chorusDepthFraction;
+    float reverbMix;
+    float reverbRoomSize;
+
     // Per-voice amplitude (square-law curve of the smoothed velocity) captured
     // at each voice's noteOn, and a global live expression multiplier. Per-voice
     // main gain = voiceBaseAmp[i] * expression; sub gain multiplies by octaveMix.
@@ -139,5 +238,7 @@ private:
     int findOldestVoice();
     void updateMixerGains();
     void updateVoiceMixerGains();
+    void updateWetDryGains();
+    void applyChorusDepth();
     void stopVoiceWavetables(int voiceIndex);
 };
