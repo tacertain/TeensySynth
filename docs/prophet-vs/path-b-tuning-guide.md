@@ -14,8 +14,8 @@ Pair structure: low CC = baseline/amount, high CC = modulation/character.
 
 | CC | Parameter            | Range                       | Default     |
 |----|----------------------|-----------------------------|-------------|
-| 41 | LP base cutoff       | 1×–20× note Hz (exp), clamped to 8 kHz max | 6× |
-| 42 | LP resonance (Q)     | 0.7–4.0 (linear)            | 0.9         |
+| 41 | LP base cutoff       | 1×–20× note Hz (exp), clamped to 8 kHz max | 7.6× (CC 86) |
+| 42 | LP resonance (Q)     | 0.7–4.0 (linear)            | 1.12 (CC 16) |
 | 43 | LP LFO depth         | 0.0–1.0 (linear)            | 0.5         |
 | 44 | LP LFO rate          | 0.05–1.5 Hz (exp)           | 0.20 Hz     |
 | 45 | Chorus wet mix       | 0.0–1.0 (linear)            | 0.433 (CC 55) |
@@ -58,22 +58,18 @@ Set the baseline above (everything else off; LFO depth 0). Then sweep CC 41
 to find the brightness that feels right musically:
 
 - Low values (1×–4×) — darker, more vocal/woody, closer to a real "vocal pad"
-- Default ~6× — balanced
+- Default ~7.6× — balanced
 - High (10×+) — brighter, up to the 8 kHz clamp
-
-**A**: 86 feels about right
 
 Then add a touch of CC 42 (resonance):
 
-- 0.7 (default) — flat, no emphasis
-- 0.9–1.5 — body without nasal honk
+- 0.7 — flat, no emphasis
+- 0.9–1.5 — body without nasal honk (default 1.12 sits here)
 - 2.0–3.0 — adds character but starts to color hard
 - Above 3.5 — risks self-oscillation; pulls the SVF closer to instability
 
 **Goal:** a sustained chord that's musically right *before* you add any
 movement.
-
-**A**: 16
 
 ---
 

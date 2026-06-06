@@ -37,8 +37,8 @@ SoundfontPadSynthesizer::SoundfontPadSynthesizer()
     , velocityFloor(50.0f / 127.0f)         // matches WHITESNAKE default CC 26 = 50
     , hpMultiplier(3.1f)                    // matches WHITESNAKE default CC 27 = 89
     , hpMix(60.0f * 2.0f / 127.0f)          // matches WHITESNAKE default CC 28 = 60
-    , lpMultiplier(6.0f)
-    , lpResonance(0.9f)
+    , lpMultiplier(7.60f)                    // matches WHITESNAKE default CC 41 = 86 (~7.6×)
+    , lpResonance(1.12f)                     // matches WHITESNAKE default CC 42 = 16 (~1.12)
     , lpLfoRateHz(0.20f)
     , lpLfoDepth(0.5f)
     , chorusMix(55.0f / 127.0f)              // matches WHITESNAKE default CC 45 = 55 (~0.433)

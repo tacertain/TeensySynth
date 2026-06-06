@@ -370,8 +370,8 @@ public:
         // Path B FX defaults: per-voice LP+LFO, chorus, reverb. Re-push on every
         // mode (re)entry so the WHITESNAKE FX chain has a known starting state
         // even if the user tweaked CCs and switched modes.
-        whitesnakePad.setPadLpMultiplier(6.0f);
-        whitesnakePad.setPadLpResonance(0.9f);
+        whitesnakePad.setPadLpMultiplier(7.60f);             // CC 41 = 86
+        whitesnakePad.setPadLpResonance(1.12f);              // CC 42 = 16
         whitesnakePad.setPadLpLfoRate(0.20f);
         whitesnakePad.setPadLpLfoDepth(0.5f);
         whitesnakePad.setChorusMix(55.0f / 127.0f);          // CC 45 = 55
