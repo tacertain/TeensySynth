@@ -12,6 +12,34 @@ and budget before any edits.
 
 ---
 
+## Why path B before path A
+
+Listening to the current WHITESNAKE mode against the 1987 record, the
+perceived gap is "patch lacks animation overall" rather than a specific
+"chord voices feel locked in lockstep." Both paths address that, but with
+different leverage:
+
+- **Path A** (render four oscillator stems from Arturia with the vector
+  envelope disabled, runtime XY-mod across them with per-voice independent
+  clocks) is the *authentic* mechanism the original VS uses. It cleanly
+  solves per-voice independence and runtime-modulated vector motion. But
+  it requires an evening of new Arturia rendering + Polyphone work, and
+  its primary win is the per-voice lockstep symptom — which is not the
+  loudest deficit on this specific record.
+- **Path B** (free-running chorus + slow per-voice filter LFO + reverb,
+  all downstream of the existing SF2 source) targets the *perceived*
+  animation gap directly. Chorus and reverb don't reset on note-on; the
+  per-voice filter LFOs have randomized phase so chord voices decorrelate
+  anyway. Stays within the existing SF2 and adds only DSP blocks.
+
+Crucially, path B is composable with path A: the post-FX chain sits
+downstream of whatever the pad source is. If we later decide path A is
+worth the effort, the path-B chain stays exactly as it is and only the
+source upstream of `finalMixer` changes. So path B is the "do the cheap
+high-leverage thing first, escalate only if needed" move.
+
+---
+
 ## Goal
 
 Make WHITESNAKE mode "breathe" without rendering new samples or rewriting the
@@ -212,9 +240,10 @@ should verify headroom before committing — see budget section.
 ## CC mapping (bank 4, CCs 41-48 in WHITESNAKE mode)
 
 New table `channel1Bank_41_50_PAD` parallel to the existing
-`channel1Bank_41_50` (string-pad controls) and
-`channel1Bank_21_30_PAD`. `installBank2ForWhitesnakePad()` gains a sibling
-`installBank4ForWhitesnakePad()` called from `CC_ModeWhitesnake`.
+`channel1Bank_41_50` (string-pad controls) and `channel1Bank_21_30_PAD`.
+The `WHITESNAKE` row in `modeBankConfigs[]` is updated to point its bank-4
+columns at this new table; no per-mode-handler edits are needed (see
+"Where each piece of code lives" below).
 
 | CC | Callback | Parameter | Range | Default | Notes |
 |----|----------|-----------|-------|---------|-------|
@@ -281,27 +310,26 @@ that, mirroring the existing bank-2 pattern.
 
 ### `MIDIControlCallbacks.{h,cpp}` (extended)
 
+The per-mode bank install machinery was refactored to a table-driven
+`modeBankConfigs[]` + `installBanksForMode()` (see commit `87c1e71`), so
+wiring a new PAD-only bank-4 table is purely additive — no edits to any
+mode handler, no new install helpers.
+
 - 8 new callback functions matching the CC table above.
-- New `channel1Bank_41_50_PAD[]` table.
-- New `installBank4ForWhitesnakePad()` and `installBank4Default()` helpers
-  (the default one re-installs the existing `channel1Bank_41_50` string-pad
-  table).
-- `CC_ModeWhitesnake` calls `installBank4ForWhitesnakePad(controller)` in
-  addition to the bank-2 install.
-- **Every other mode handler** (`CC_ModePluckedStrings`, `CC_ModeDrone`,
-  `CC_ModeStringPadsBright`, `CC_ModeSoundfontTrombone`, `CC_ModeTusk`,
-  `CC_ModeIran`, `CC_ModeTuskChord`) must call `installBank4Default(controller)`.
-  Currently none of them touch bank 4; the table is installed once at
-  startup. After this change, switching from WHITESNAKE to any other mode
-  re-points bank 4 back to the string-pad callbacks.
+- New `channel1Bank_41_50_PAD[]` table (parallel to the existing
+  `channel1Bank_41_50` string-pad table).
+- In `modeBankConfigs[]`, change the `WHITESNAKE` row's `bank4` and
+  `bank4_count` columns from `channel1Bank_41_50` /
+  `channel1Bank_41_50_count` to `channel1Bank_41_50_PAD` /
+  `channel1Bank_41_50_PAD_count`. Every other row stays on the string-pad
+  table. `installBanksForMode()` re-installs bank 4 from the table on every
+  mode switch, so leaving WHITESNAKE automatically reverts bank 4 to the
+  string-pad table — no per-handler edits needed.
 
 ### `MIDIController.cpp` (unchanged)
 
 The bank installer machinery already supports re-installing tables
-per-bank (`installCallbacks(byte bank, ...)` at line 204). Initial bank
-registrations in the constructor at lines 47–53 stay as-is — bank 4 keeps
-defaulting to `channel1Bank_41_50` on startup; only WHITESNAKE entry
-swaps it.
+per-bank. Initial bank registrations in the constructor stay as-is.
 
 ---
 
@@ -376,14 +404,12 @@ trim the per-voice filter LFO.
    `AudioEffectFlange` instances because `AudioEffectChorus` does no LFO
    modulation. CC 46 maps to `delay_depth` on both flanges via `voices()`
    re-init. See B2.
-3. ~~**Bank 4 install on non-WHITESNAKE modes.**~~ Verified against
-   current source: bank 4 is installed once at startup
-   (`MIDIController.cpp:51`) and no mode handler touches it. Adding a
-   WHITESNAKE-specific install requires adding
-   `installBank4Default(controller)` to every other mode handler
-   (`CC_ModePluckedStrings`, `CC_ModeDrone`, `CC_ModeStringPadsBright`,
-   `CC_ModeSoundfontTrombone`, `CC_ModeTusk`, `CC_ModeIran`,
-   `CC_ModeTuskChord`). Mirror the existing `installBank2ForMode` pattern.
+3. ~~**Bank 4 install on non-WHITESNAKE modes.**~~ Resolved by the
+   table-driven refactor in commit `87c1e71`: `modeBankConfigs[]` now
+   centralises the per-mode bank-2 and bank-4 table assignments, and
+   `installBanksForMode()` (called from every mode handler) re-installs
+   both on every mode switch. Adding a WHITESNAKE-specific bank-4 table
+   is now a one-cell edit in that table, with no mode-handler changes.
 4. ~~**LFO phase distribution.**~~ Resolved: use `random(360)` at
    construction time for each voice's initial LFO phase. Decorrelated
    forever, no audible difference from golden-angle distribution.
