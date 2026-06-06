@@ -206,7 +206,7 @@ void CC_HighpassMultiplier(MIDIController* controller, byte channel, byte contro
 void CC_ModePluckedStrings(MIDIController* controller, byte channel, byte control, byte value) {
     if (value == 127) {
         controller->getSynth().setSynthMode(HybridSynthesizer::PLUCKED_STRINGS);
-        installBank2ForMode(controller, false);
+        installBanksForMode(controller, HybridSynthesizer::PLUCKED_STRINGS);
         Serial.print("Mode: PLUCKED_STRINGS (CC ");
         Serial.print(control);
         Serial.println(")");
@@ -216,7 +216,7 @@ void CC_ModePluckedStrings(MIDIController* controller, byte channel, byte contro
 void CC_ModeDrone(MIDIController* controller, byte channel, byte control, byte value) {
     if (value == 127) {
         controller->getSynth().setSynthMode(HybridSynthesizer::DRONE);
-        installBank2ForMode(controller, false);
+        installBanksForMode(controller, HybridSynthesizer::DRONE);
         Serial.print("Mode: DRONE (CC ");
         Serial.print(control);
         Serial.println(")");
@@ -226,7 +226,7 @@ void CC_ModeDrone(MIDIController* controller, byte channel, byte control, byte v
 void CC_ModeStringPadsBright(MIDIController* controller, byte channel, byte control, byte value) {
     if (value == 127) {
         controller->getSynth().setSynthMode(HybridSynthesizer::STRING_PADS);
-        installBank2ForMode(controller, false);
+        installBanksForMode(controller, HybridSynthesizer::STRING_PADS);
         controller->getSynth().getStringPad().loadPreset(StringPadSynthesizer::PRESET_BRIGHT_STRINGS);
         Serial.print("Mode: STRING_PADS + Bright Strings preset (CC ");
         Serial.print(control);
@@ -239,7 +239,8 @@ void CC_ModeSoundfontTrombone(MIDIController* controller, byte channel, byte con
         Serial.print("CC ");
         Serial.print(control);
         Serial.println(" triggered - Switching to Soundfont mode");
-        controller->getSynth().setSynthMode(HybridSynthesizer::SOUNDFONT);        installBank2ForMode(controller, true);        
+        controller->getSynth().setSynthMode(HybridSynthesizer::SOUNDFONT);
+        installBanksForMode(controller, HybridSynthesizer::SOUNDFONT);
         Serial.println("Unloading all instruments...");
         for (int i = 0; i < 4; i++) {
             controller->getSynth().getSoundfont().unloadInstrument(i);
@@ -272,7 +273,7 @@ void CC_ModeTusk(MIDIController* controller, byte channel, byte control, byte va
         Serial.print(control);
         Serial.println(" triggered - Switching to TUSK mode");
         controller->getSynth().setSynthMode(HybridSynthesizer::TUSK);
-        installBank2ForMode(controller, true);
+        installBanksForMode(controller, HybridSynthesizer::TUSK);
         controller->getSynth().setSplitPoint(60);
         
         // Reset ADSR to defaults
@@ -291,7 +292,7 @@ void CC_ModeTusk(MIDIController* controller, byte channel, byte control, byte va
 void CC_ModeIran(MIDIController* controller, byte channel, byte control, byte value) {
     if (value == 127) {
         controller->getSynth().setSynthMode(HybridSynthesizer::IRAN);
-        installBank2ForMode(controller, false);
+        installBanksForMode(controller, HybridSynthesizer::IRAN);
         controller->getSynth().setSplitPoint(60);
         Serial.print("Mode: IRAN (CC ");
         Serial.print(control);
@@ -305,7 +306,7 @@ void CC_ModeWhitesnake(MIDIController* controller, byte channel, byte control, b
         Serial.print(control);
         Serial.println(" triggered - Switching to WHITESNAKE mode");
         controller->getSynth().setSynthMode(HybridSynthesizer::WHITESNAKE);
-        installBank2ForWhitesnakePad(controller);
+        installBanksForMode(controller, HybridSynthesizer::WHITESNAKE);
         // No state reset here: soundfont volume, pad CC params (octave mix,
         // velocity floor, HP mix, HP multiplier), and master volume all
         // persist from wherever the user left them. Boot defaults live in
@@ -322,7 +323,7 @@ void CC_ModeTuskChord(MIDIController* controller, byte channel, byte control, by
         Serial.print(control);
         Serial.println(" triggered - Switching to TUSK_CHORD mode");
         controller->getSynth().setSynthMode(HybridSynthesizer::TUSK_CHORD);
-        installBank2ForMode(controller, true);
+        installBanksForMode(controller, HybridSynthesizer::TUSK_CHORD);
         controller->getSynth().setSplitPoint(60);
         
         // Reset ADSR to defaults
@@ -453,17 +454,42 @@ const MIDIControllerChannelCallback channel1Bank_51_60[] = {
 const size_t channel1Bank_51_60_count = sizeof(channel1Bank_51_60) / sizeof(channel1Bank_51_60[0]);
 
 // ============================================================================
-// Helper Functions
+// Per-mode bank table assignments
 // ============================================================================
+//
+// Each row maps a synth mode to the CC callback table that should be active
+// in every swap-by-mode bank (today: banks 2 and 4). To add a new
+// swap-by-mode bank in the future, extend ModeBankConfig with another
+// (table, count) pair, populate the new column in every row below, and add
+// an installCallbacks() line in installBanksForMode().
 
-void installBank2ForMode(MIDIController* controller, bool isSoundfontMode) {
-    if (isSoundfontMode) {
-        controller->installCallbacks(2, channel1Bank_21_30_SF, channel1Bank_21_30_SF_count);
-    } else {
-        controller->installCallbacks(2, channel1Bank_21_30, channel1Bank_21_30_count);
+struct ModeBankConfig {
+    HybridSynthesizer::SynthMode mode;
+    const MIDIControllerChannelCallback* bank2;
+    size_t bank2_count;
+    const MIDIControllerChannelCallback* bank4;
+    size_t bank4_count;
+};
+
+static const ModeBankConfig modeBankConfigs[] = {
+    { HybridSynthesizer::PLUCKED_STRINGS, channel1Bank_21_30,     channel1Bank_21_30_count,     channel1Bank_41_50, channel1Bank_41_50_count },
+    { HybridSynthesizer::DRONE,           channel1Bank_21_30,     channel1Bank_21_30_count,     channel1Bank_41_50, channel1Bank_41_50_count },
+    { HybridSynthesizer::STRING_PADS,     channel1Bank_21_30,     channel1Bank_21_30_count,     channel1Bank_41_50, channel1Bank_41_50_count },
+    { HybridSynthesizer::SOUNDFONT,       channel1Bank_21_30_SF,  channel1Bank_21_30_SF_count,  channel1Bank_41_50, channel1Bank_41_50_count },
+    { HybridSynthesizer::SPLIT,           channel1Bank_21_30,     channel1Bank_21_30_count,     channel1Bank_41_50, channel1Bank_41_50_count },
+    { HybridSynthesizer::IRAN,            channel1Bank_21_30,     channel1Bank_21_30_count,     channel1Bank_41_50, channel1Bank_41_50_count },
+    { HybridSynthesizer::TUSK,            channel1Bank_21_30_SF,  channel1Bank_21_30_SF_count,  channel1Bank_41_50, channel1Bank_41_50_count },
+    { HybridSynthesizer::TUSK_CHORD,      channel1Bank_21_30_SF,  channel1Bank_21_30_SF_count,  channel1Bank_41_50, channel1Bank_41_50_count },
+    { HybridSynthesizer::WHITESNAKE,      channel1Bank_21_30_PAD, channel1Bank_21_30_PAD_count, channel1Bank_41_50, channel1Bank_41_50_count },
+};
+
+void installBanksForMode(MIDIController* controller, HybridSynthesizer::SynthMode mode) {
+    for (const ModeBankConfig& cfg : modeBankConfigs) {
+        if (cfg.mode == mode) {
+            controller->installCallbacks(2, cfg.bank2, cfg.bank2_count);
+            controller->installCallbacks(4, cfg.bank4, cfg.bank4_count);
+            return;
+        }
     }
-}
-
-void installBank2ForWhitesnakePad(MIDIController* controller) {
-    controller->installCallbacks(2, channel1Bank_21_30_PAD, channel1Bank_21_30_PAD_count);
+    Serial.printf("installBanksForMode: no config for mode %d\n", (int)mode);
 }

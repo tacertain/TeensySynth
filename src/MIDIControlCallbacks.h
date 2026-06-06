@@ -105,8 +105,7 @@ extern const size_t channel1Bank_51_60_count;
 // Helper Functions
 // ============================================================================
 
-// Install bank 2 callbacks appropriate for soundfont or non-soundfont modes
-void installBank2ForMode(MIDIController* controller, bool isSoundfontMode);
-
-// Install bank 2 callbacks for the Whitesnake pad synth (CC 21-24 only)
-void installBank2ForWhitesnakePad(MIDIController* controller);
+// Install all swap-by-mode CC bank tables for the given mode in one call.
+// Today this covers banks 2 and 4. Each mode's table assignments live in
+// modeBankConfigs[] in MIDIControlCallbacks.cpp.
+void installBanksForMode(MIDIController* controller, HybridSynthesizer::SynthMode mode);
