@@ -38,6 +38,7 @@ SoundfontPadSynthesizer::SoundfontPadSynthesizer()
     , hpMultiplier(3.1f)                    // matches WHITESNAKE default CC 27 = 89
     , hpMix(60.0f * 2.0f / 127.0f)          // matches WHITESNAKE default CC 28 = 60
     , lpMultiplier(7.60f)                    // matches WHITESNAKE default CC 41 = 86 (~7.6×)
+    , lpKeyTrack(0.0f)                        // 0% tracking below middle C: flat cutoff floor at MC's value (locked in on hardware)
     , lpResonance(1.12f)                     // matches WHITESNAKE default CC 42 = 16 (~1.12)
     , lpLfoRateHz(0.20f)
     , lpLfoDepth(0.5f)
@@ -219,10 +220,8 @@ void SoundfontPadSynthesizer::noteOn(int midiNote, float velocity) {
     hpFilters[voiceIndex].frequency(noteHz * hpMultiplier);
     // Per-voice LP cutoff base, pinned at noteOn. LFO modulates ±octaveControl
     // around this base. Re-pushed to sounding voices when setPadLpMultiplier
-    // is called. Clamped to LP_CUTOFF_MAX_HZ to keep the Chamberlin SVF stable.
-    float lpHz = noteHz * lpMultiplier;
-    if (lpHz > LP_CUTOFF_MAX_HZ) lpHz = LP_CUTOFF_MAX_HZ;
-    lpfVoice[voiceIndex].frequency(lpHz);
+    // or setPadLpKeyTrack is called. See computeLpCutoffHz for the curve.
+    lpfVoice[voiceIndex].frequency(computeLpCutoffHz(midiNote));
 
     float amp = velocityToAmp(velocity);
     voiceBaseAmp[voiceIndex] = amp;
@@ -386,6 +385,26 @@ void SoundfontPadSynthesizer::setHighpassMix(float m) {
     updateVoiceMixerGains();
 }
 
+// Per-voice LP base cutoff for a MIDI note. At/above middle C the cutoff is
+// fully proportional to pitch (noteHz * lpMultiplier) -- the original curve.
+// Below middle C the slope is reduced by lpKeyTrack so the bass keeps
+// brightness: each octave down multiplies the cutoff by 2^(-lpKeyTrack)
+// instead of halving it. Pivots exactly at middle C (both branches equal
+// refHz*lpMultiplier there), so the above-middle-C sound is untouched.
+// Clamped to LP_CUTOFF_MAX_HZ to keep the Chamberlin SVF stable.
+float SoundfontPadSynthesizer::computeLpCutoffHz(int midiNote) const {
+    constexpr float refHz = 261.63f;  // middle C
+    float noteHz = 440.0f * powf(2.0f, ((float)midiNote - 69.0f) / 12.0f);
+    float lpHz;
+    if (noteHz >= refHz) {
+        lpHz = noteHz * lpMultiplier;
+    } else {
+        lpHz = refHz * lpMultiplier * powf(noteHz / refHz, lpKeyTrack);
+    }
+    if (lpHz > LP_CUTOFF_MAX_HZ) lpHz = LP_CUTOFF_MAX_HZ;
+    return lpHz;
+}
+
 void SoundfontPadSynthesizer::setPadLpMultiplier(float m) {
     lpMultiplier = constrain(m, 1.0f, 20.0f);
     // Re-push the LP base cutoff for every sounding voice (held or releasing).
@@ -394,10 +413,18 @@ void SoundfontPadSynthesizer::setPadLpMultiplier(float m) {
     for (int i = 0; i < NUM_VOICES; ++i) {
         int n = voiceStates[i].midiNote;
         if (n < 0) continue;
-        float noteHz = 440.0f * powf(2.0f, ((float)n - 69.0f) / 12.0f);
-        float lpHz = noteHz * lpMultiplier;
-        if (lpHz > LP_CUTOFF_MAX_HZ) lpHz = LP_CUTOFF_MAX_HZ;
-        lpfVoice[i].frequency(lpHz);
+        lpfVoice[i].frequency(computeLpCutoffHz(n));
+    }
+}
+
+void SoundfontPadSynthesizer::setPadLpKeyTrack(float k) {
+    lpKeyTrack = constrain(k, 0.0f, 1.0f);
+    // Re-push to every sounding voice (held or releasing), same as the
+    // multiplier setter. Only notes below middle C actually change.
+    for (int i = 0; i < NUM_VOICES; ++i) {
+        int n = voiceStates[i].midiNote;
+        if (n < 0) continue;
+        lpfVoice[i].frequency(computeLpCutoffHz(n));
     }
 }
 

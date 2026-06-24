@@ -147,6 +147,25 @@ This gives ~3 dB of brightness motion swinging slowly under the pad. With
 random per-voice phase, a 3-note chord has each voice peaking at a
 different time.
 
+**Filter key-tracking (added after hardware tuning).** Pure proportional
+tracking (`cutoff = noteHz × lpMultiplier`) made notes below middle C
+progressively muffled — the absolute cutoff falls with pitch, so a note an
+octave down sits at half the cutoff. The fix is a key-track exponent
+(`lpKeyTrack`) applied **only below middle C**, pivoting exactly at middle C
+so the above-MC sound (which was already right) is untouched:
+
+```
+noteHz >= refHz:  cutoff = noteHz * lpMultiplier              # unchanged
+noteHz <  refHz:  cutoff = refHz  * lpMultiplier * (noteHz/refHz)^lpKeyTrack
+```
+
+`lpKeyTrack = 1.0` reproduces the original full-tracking behavior;
+`0.0` makes the cutoff flat below middle C (every bass note gets middle C's
+cutoff, ~1988 Hz at the 7.6× default). Locked in at **0.0** on hardware —
+the flat floor gave the best low-end body without brightening the top.
+It is a build-time constant (`SoundfontPadSynthesizer` constructor default),
+not CC-bound; see the note under the CC table.
+
 ### B2. Global ensemble chorus (two flanges)
 
 **Why not `AudioEffectChorus`:** the Teensy library's `AudioEffectChorus`
@@ -245,18 +264,29 @@ The `WHITESNAKE` row in `modeBankConfigs[]` is updated to point its bank-4
 columns at this new table; no per-mode-handler edits are needed (see
 "Where each piece of code lives" below).
 
+> **Implementation note (as shipped).** The table below reflects the
+> mapping actually wired in `channel1Bank_41_50_PAD[]`
+> (`MIDIControlCallbacks.cpp`). It differs from this document's original
+> proposal: the final implementation put **cutoff on CC 41 and resonance on
+> CC 42** (low CC = baseline/amount), pushing **LFO depth/rate to CC 43/44**
+> (high CC = modulation/character), to keep the pair structure consistent
+> with the other banks. Defaults below are the shipped values from the
+> `SoundfontPadSynthesizer` constructor, not the placeholder defaults in the
+> original draft. The musician-facing `docs/keyboard-controls.md` matches
+> this table; treat that and the code as the source of truth.
+
 | CC | Callback | Parameter | Range | Default | Notes |
 |----|----------|-----------|-------|---------|-------|
-| 41 | `CC_WhitesnakeFilterLfoRate`   | per-voice LFO rate          | 0.05–1.5 Hz (exponential) | 0.20 Hz | Global rate, applied to all voice LFOs. Phase stays randomized. |
-| 42 | `CC_WhitesnakeFilterLfoDepth`  | per-voice LFO amplitude     | 0.0–1.0 (linear)          | 0.5     | 0 = static filter, 1 = full ± octaveControl swing. |
-| 43 | `CC_WhitesnakeFilterCutoff`    | base filter multiplier      | 1.0–20.0× note (exp)      | 6.0×    | The base cutoff that the LFO modulates around. |
-| 44 | `CC_WhitesnakeFilterResonance` | filter Q                    | 0.7–4.0 (linear)          | 0.9     | Watch for self-oscillation above ~3.5. |
-| 45 | `CC_WhitesnakeChorusMix`       | chorus wet level            | 0.0–1.0 (linear)          | 0.4     | Wet/dry blend of chorus bus into output (`wetDryMixer.ch1` gain). |
-| 46 | `CC_WhitesnakeChorusDepth`     | chorus modulation depth     | 0–264 samples (~0–6 ms)   | 132 / 176 (per flange) | Maps to `delay_depth` on both flanges via `voices()` re-init. Scales around the defaults. |
-| 47 | `CC_WhitesnakeReverbMix`       | reverb wet level            | 0.0–1.0 (linear)          | 0.25    | Wet/dry blend of reverb tap into output. |
-| 48 | `CC_WhitesnakeReverbSize`      | room size                   | 0.0–1.0 (linear)          | 0.7     | Maps to Freeverb's `roomsize()`. |
+| 41 | `CC_WhitesnakeFilterCutoff`    | base filter multiplier      | 1.0–20.0× note (exp)      | 7.6× (CC 41 = 86) | The base cutoff that the LFO modulates around. Clamped to 8 kHz internally for SVF stability. Key-tracked above middle C only; flat below it (see "Filter key-tracking" above). `lpKeyTrack` is a build-time constant (0.0), not a CC. |
+| 42 | `CC_WhitesnakeFilterResonance` | filter Q                    | 0.7–4.0 (linear)          | 1.12 (CC 42 = 16) | Watch for self-oscillation above ~3.5. |
+| 43 | `CC_WhitesnakeFilterLfoDepth`  | per-voice LFO amplitude     | 0.0–1.0 (linear)          | 0.5     | 0 = static filter, 1 = full ± octaveControl swing. |
+| 44 | `CC_WhitesnakeFilterLfoRate`   | per-voice LFO rate          | 0.05–1.5 Hz (exponential) | 0.20 Hz | Global rate, applied to all voice LFOs. Phase stays randomized. |
+| 45 | `CC_WhitesnakeChorusMix`       | chorus wet level            | 0.0–1.0 (linear)          | 0.433 (CC 45 = 55) | Wet/dry blend of chorus bus into output (`wetDryMixer.ch1` gain). |
+| 46 | `CC_WhitesnakeChorusDepth`     | chorus modulation depth     | 0.0–1.0 fraction (~0–6 ms) | 0.567 (CC 46 = 72) | Maps to `delay_depth` on both flanges via `voices()` re-init. Scales around the defaults (132 / 176 samples per flange at fraction 0.5). |
+| 47 | `CC_WhitesnakeReverbMix`       | reverb wet level            | 0.0–1.0 (linear)          | 0.591 (CC 47 = 75) | Wet/dry blend of reverb tap into output. |
+| 48 | `CC_WhitesnakeReverbSize`      | room size                   | 0.0–1.0 (linear)          | 0.591 (CC 48 = 75) | Maps to Freeverb's `roomsize()`. |
 
-CC 41-45 retain their non-WHITESNAKE meanings in bank 4 (string-pad controls)
+CC 41-48 retain their non-WHITESNAKE meanings in bank 4 (string-pad controls)
 when the active mode is not WHITESNAKE — the bank install switch handles
 that, mirroring the existing bank-2 pattern.
 
@@ -390,7 +420,7 @@ trim the per-voice filter LFO.
   delay rate as a modulation input either; we'd need to call its `voices()`
   re-init periodically. Defer.
 - **CC for the per-voice LFO depth ON FILTER (`octaveControl`)** vs LFO
-  amplitude (`amplitude()`). We expose only LFO amplitude (CC 42). The
+  amplitude (`amplitude()`). We expose only LFO amplitude (CC 43). The
   octaveControl is a build-time constant (0.6) — keeps the design simple
   and the depth knob musically intuitive. Could add a CC later if needed.
 
@@ -423,7 +453,7 @@ trim the per-voice filter LFO.
 
 1. Build the chain with all wet/dry mixes at 0 (everything bypassed). Sanity
    check that the sound is identical to current WHITESNAKE.
-2. Bring up CC 41/42 (filter LFO rate/depth) only. Verify per-voice
+2. Bring up CC 43/44 (filter LFO depth/rate) only. Verify per-voice
    independence by playing a 3-note chord and listening for the brightness
    to peak at different times on the three voices.
 3. Add CC 45 chorus mix. Verify the wash is mono and never resets on

@@ -163,7 +163,7 @@ The WHITESNAKE velocity smoother runs at a fixed τ ≈ 2.7 s (no CC binding).
 Pair structure: low CC in each pair = baseline/amount, high CC = modulation/character.
 
 **LP filter (always inline):**
-- **CC 41**: LP Cutoff Multiplier (0-127) — exponential, 1.0× – 20.0× of note frequency. Clamped internally to 8 kHz to keep the Chamberlin SVF stable. Default 7.6× (CC 41 = 86).
+- **CC 41**: LP Cutoff Multiplier (0-127) — exponential, 1.0× – 20.0× of note frequency. Clamped internally to 8 kHz to keep the Chamberlin SVF stable. Default 7.6× (CC 41 = 86). **Key-tracking:** the cutoff is `noteHz × multiplier` only at and above middle C; below middle C it is flat (every note gets middle C's cutoff, ~1988 Hz at the default multiplier). This keeps the bass from going muffled — pure proportional tracking made low notes progressively darker. The multiplier scales both the above-MC slope and the below-MC floor.
 - **CC 42**: LP Resonance (Q) (0-127) — linear, 0.7 – 4.0. Default Q = 1.12 (CC 42 = 16). Above ~3.5 risks self-oscillation.
 
 **LP filter modulation (per-voice free-running sine, randomized phase per voice):**

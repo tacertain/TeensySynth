@@ -108,6 +108,15 @@ public:
     void setPadLpMultiplier(float m);
     float getPadLpMultiplier() const { return lpMultiplier; }
 
+    // Filter key-tracking exponent applied ONLY below middle C. 1.0 = full
+    // proportional tracking (cutoff = noteHz * lpMultiplier, the original
+    // behavior, which darkens the low end). Lower values lift the bass: the
+    // cutoff falls more slowly per octave below middle C. 0.0 = flat (every
+    // note below middle C gets middle C's cutoff). At/above middle C the
+    // cutoff is unchanged regardless of this value.
+    void setPadLpKeyTrack(float k);
+    float getPadLpKeyTrack() const { return lpKeyTrack; }
+
     // LP filter Q, applied to every voice's lpfVoice. Range [0.7, 4.0].
     void setPadLpResonance(float q);
     float getPadLpResonance() const { return lpResonance; }
@@ -213,6 +222,7 @@ private:
 
     // Path B state
     float lpMultiplier;
+    float lpKeyTrack;   // key-track exponent below middle C (1.0 = original)
     float lpResonance;
     float lpLfoRateHz;
     float lpLfoDepth;
@@ -232,6 +242,11 @@ private:
 
     // Square-law velocity-to-amplitude curve (uses velocityFloor / 20..100 window).
     float velocityToAmp(float velocity) const;
+
+    // Per-voice LP base cutoff (Hz) for a MIDI note: proportional to pitch at
+    // and above middle C, key-track-lifted below it. Shared by noteOn and the
+    // re-push setters so the curve is defined in exactly one place.
+    float computeLpCutoffHz(int midiNote) const;
 
     int findAvailableVoice();
     int findVoicePlayingNote(int midiNote);
